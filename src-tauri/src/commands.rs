@@ -1,6 +1,7 @@
 //! Tauri 커맨드 계층 — 프론트(src/lib/api.ts)와 1:1.
 //! 블로킹 작업(네트워크/파일)은 전부 spawn_blocking으로 감싼다 (net 모듈은 블로킹 클라이언트).
 use crate::auth::{AuthProvider, MockAuthProvider};
+use crate::error::AppError;
 use crate::launch::install::{build_launch_plan, prepare_version, LaunchConfig};
 use crate::launch::java::AdoptiumProvider;
 use crate::launch::process::spawn_and_wait;
@@ -24,10 +25,6 @@ pub struct AppState {
     pub paths: Paths,
 }
 
-fn err_str(e: impl std::fmt::Display) -> String {
-    e.to_string()
-}
-
 fn vm_list(paths: &Paths) -> Vec<InstanceVm> {
     store::list_instances(paths)
         .iter()
@@ -36,17 +33,18 @@ fn vm_list(paths: &Paths) -> Vec<InstanceVm> {
         .collect()
 }
 
-fn vm_one(paths: &Paths, id: &str) -> Result<InstanceVm, String> {
-    let cfg = store::get_instance(paths, id).ok_or_else(|| format!("unknown instance {id}"))?;
+fn vm_one(paths: &Paths, id: &str) -> Result<InstanceVm, AppError> {
+    let cfg = store::get_instance(paths, id)
+        .ok_or_else(|| AppError::internal(format!("unknown instance {id}")))?;
     Ok(store::build_vm(paths, &cfg, 0))
 }
 
 #[tauri::command]
-pub async fn list_instances(state: State<'_, AppState>) -> Result<Vec<InstanceVm>, String> {
+pub async fn list_instances(state: State<'_, AppState>) -> Result<Vec<InstanceVm>, AppError> {
     let paths = state.paths.clone();
     tauri::async_runtime::spawn_blocking(move || vm_list(&paths))
         .await
-        .map_err(err_str)
+        .map_err(AppError::internal)
 }
 
 #[tauri::command]
@@ -56,7 +54,7 @@ pub async fn create_manual_instance(
     mc_version: String,
     loader_kind: String,
     color: String,
-) -> Result<InstanceVm, String> {
+) -> Result<InstanceVm, AppError> {
     let paths = state.paths.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let kind = match loader_kind.to_lowercase().as_str() {
@@ -65,14 +63,14 @@ pub async fn create_manual_instance(
             "quilt" => LoaderKind::Quilt,
             "forge" => LoaderKind::Forge,
             "neoforge" => LoaderKind::Neoforge,
-            other => return Err(format!("unknown loader: {other}")),
+            other => return Err(AppError::internal(format!("unknown loader: {other}"))),
         };
         let loader = aqua_manifest::manifest::LoaderRef { kind, version: String::new() };
-        let cfg = store::create_manual(&paths, &name, &mc_version, loader, &color).map_err(err_str)?;
+        let cfg = store::create_manual(&paths, &name, &mc_version, loader, &color)?;
         Ok(store::build_vm(&paths, &cfg, 0))
     })
     .await
-    .map_err(err_str)?
+    .map_err(AppError::internal)?
 }
 
 #[derive(Debug, Serialize)]
@@ -90,10 +88,10 @@ pub struct ManifestPreview {
 
 /// 딥링크/URL 추가 확인 모달용 미리보기 — PRD 8.7 (출처 도메인 표기는 스푸핑 방어).
 #[tauri::command]
-pub async fn preview_manifest(url: String) -> Result<ManifestPreview, String> {
+pub async fn preview_manifest(url: String) -> Result<ManifestPreview, AppError> {
     tauri::async_runtime::spawn_blocking(move || {
-        let fetch = HttpFetcher::new().map_err(err_str)?;
-        let fetched = fetch_manifest(&fetch, &url).map_err(err_str)?;
+        let fetch = HttpFetcher::new()?;
+        let fetched = fetch_manifest(&fetch, &url)?;
         let m = &fetched.manifest;
         Ok(ManifestPreview {
             name: m.server_display_name.clone(),
@@ -108,23 +106,23 @@ pub async fn preview_manifest(url: String) -> Result<ManifestPreview, String> {
         })
     })
     .await
-    .map_err(err_str)?
+    .map_err(AppError::internal)?
 }
 
 #[tauri::command]
 pub async fn create_instance_from_manifest(
     state: State<'_, AppState>,
     url: String,
-) -> Result<InstanceVm, String> {
+) -> Result<InstanceVm, AppError> {
     let paths = state.paths.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let fetch = HttpFetcher::new().map_err(err_str)?;
-        let fetched = fetch_manifest(&fetch, &url).map_err(err_str)?;
-        let cfg = store::create_from_manifest(&paths, &fetched.manifest, &url).map_err(err_str)?;
+        let fetch = HttpFetcher::new()?;
+        let fetched = fetch_manifest(&fetch, &url)?;
+        let cfg = store::create_from_manifest(&paths, &fetched.manifest, &url)?;
         Ok(store::build_vm(&paths, &cfg, 0))
     })
     .await
-    .map_err(err_str)?
+    .map_err(AppError::internal)?
 }
 
 #[tauri::command]
@@ -133,25 +131,25 @@ pub async fn toggle_mod(
     id: String,
     path: String,
     enabled: bool,
-) -> Result<InstanceVm, String> {
+) -> Result<InstanceVm, AppError> {
     let paths = state.paths.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        store::toggle_mod(&paths, &id, &path, enabled).map_err(err_str)?;
+        store::toggle_mod(&paths, &id, &path, enabled)?;
         vm_one(&paths, &id)
     })
     .await
-    .map_err(err_str)?
+    .map_err(AppError::internal)?
 }
 
 #[tauri::command]
-pub async fn reset_instance(state: State<'_, AppState>, id: String) -> Result<InstanceVm, String> {
+pub async fn reset_instance(state: State<'_, AppState>, id: String) -> Result<InstanceVm, AppError> {
     let paths = state.paths.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        store::reset_to_manifest(&paths, &id).map_err(err_str)?;
+        store::reset_to_manifest(&paths, &id)?;
         vm_one(&paths, &id)
     })
     .await
-    .map_err(err_str)?
+    .map_err(AppError::internal)?
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -187,19 +185,20 @@ impl Throttled {
 
 /// 동기화 수행 (내부 공용). 매니페스트 인스턴스가 아니면 no-op.
 /// fetch 실패는 §8.2.6 오프라인 정책 — 에러 대신 offline 표시를 반환.
-fn run_sync(paths: &Paths, id: &str) -> Result<bool, String> {
-    let mut cfg = store::get_instance(paths, id).ok_or("unknown instance")?;
+fn run_sync(paths: &Paths, id: &str) -> Result<bool, AppError> {
+    let mut cfg = store::get_instance(paths, id)
+        .ok_or_else(|| AppError::internal(format!("unknown instance {id}")))?;
     let Some(url) = cfg.manifest_source.clone() else {
         return Ok(false); // 수동 인스턴스 — 동기화 없음 (PRD 8.8)
     };
-    let fetch = HttpFetcher::new().map_err(err_str)?;
+    let fetch = HttpFetcher::new()?;
     let fetched = match fetch_manifest(&fetch, &url) {
         Ok(f) => f,
         Err(SyncError::Fetch(e)) => {
             tracing::warn!(%e, "manifest fetch failed — offline policy (PRD 8.2.6)");
             return Ok(false);
         }
-        Err(e) => return Err(err_str(e)),
+        Err(e) => return Err(e.into()),
     };
     if cfg.manifest_pinned || cfg.manifest_hash.as_deref() == Some(fetched.hash_hex.as_str()) {
         return Ok(false);
@@ -215,13 +214,13 @@ fn run_sync(paths: &Paths, id: &str) -> Result<bool, String> {
         &cfg.optional_mods_selection,
         &now_label(),
     )
-    .map_err(err_str)?;
-    store::save_cached_manifest(paths, id, &fetched.manifest).map_err(err_str)?;
+    ?;
+    store::save_cached_manifest(paths, id, &fetched.manifest)?;
     cfg.manifest_hash = Some(fetched.hash_hex.clone());
     cfg.manifest_display_version = Some(fetched.manifest.display_version.clone());
     cfg.last_synced_at = Some(now_label());
     cfg.install_state = aqua_manifest::instance::InstallState::Ready;
-    store::save_instance(paths, &cfg).map_err(err_str)?;
+    store::save_instance(paths, &cfg)?;
     Ok(outcome.changed)
 }
 
@@ -230,16 +229,16 @@ fn pick_loader_version(
     loader: &dyn ModLoader,
     mc_version: &str,
     configured: &str,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     if !configured.is_empty() {
         return Ok(configured.to_string());
     }
-    let versions = loader.list_versions(mc_version).map_err(err_str)?;
+    let versions = loader.list_versions(mc_version)?;
     Ok(versions
         .iter()
         .find(|v| v.stable)
         .or(versions.first())
-        .ok_or("no loader versions")?
+        .ok_or_else(|| AppError::LoaderInstall(format!("no loader versions for {mc_version}")))?
         .id
         .clone())
 }
@@ -253,14 +252,14 @@ fn now_label() -> String {
 }
 
 #[tauri::command]
-pub async fn sync_now(state: State<'_, AppState>, id: String) -> Result<InstanceVm, String> {
+pub async fn sync_now(state: State<'_, AppState>, id: String) -> Result<InstanceVm, AppError> {
     let paths = state.paths.clone();
     tauri::async_runtime::spawn_blocking(move || {
         run_sync(&paths, &id)?;
         vm_one(&paths, &id)
     })
     .await
-    .map_err(err_str)?
+    .map_err(AppError::internal)?
 }
 
 fn platform() -> (&'static str, &'static str, &'static str, &'static str) {
@@ -279,19 +278,20 @@ struct GameExited {
 
 /// 플레이 — PRD 8.2.1(플레이 시 동기화) + 8.15 파이프라인 전체.
 #[tauri::command]
-pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), String> {
+pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), AppError> {
     let paths = state.paths.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let (rules_os, rules_arch, ad_os, ad_arch) = platform();
         let ctx = RuleContext::new(rules_os, rules_arch);
-        let fetch = HttpFetcher::new().map_err(err_str)?;
+        let fetch = HttpFetcher::new()?;
         let mut progress = Throttled::new(app.clone());
 
         // 1) 동기화 (§8.2.1 플레이 버튼 트리거)
         progress.emit(&id, "sync", "");
         run_sync(&paths, &id)?;
 
-        let mut cfg = store::get_instance(&paths, &id).ok_or("unknown instance")?;
+        let mut cfg = store::get_instance(&paths, &id)
+            .ok_or_else(|| AppError::internal(format!("unknown instance {id}")))?;
         let cache = paths.cache_dir();
 
         // 2) 로더 준비 (§8.1)
@@ -309,7 +309,7 @@ pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Res
                 let ictx = InstallContext { shared_cache_root: &cache, work_dir: &cache };
                 let profile = loader
                     .install(&cfg.minecraft_version, &version, &ictx)
-                    .map_err(err_str)?;
+                    ?;
                 Some(profile.version_json_path)
             }
             LoaderKind::Forge | LoaderKind::Neoforge => {
@@ -324,7 +324,7 @@ pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Res
                     &ctx,
                     &mut |stage, item| progress_emit_shim(&mut progress, &id_p, stage, item),
                 )
-                .map_err(err_str)?;
+                ?;
                 let java = match &cfg.java_path_override {
                     Some(p) => std::path::PathBuf::from(p),
                     None => AdoptiumProvider {
@@ -334,7 +334,7 @@ pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Res
                         arch: ad_arch.into(),
                     }
                     .resolve(vanilla.merged.java_major)
-                    .map_err(err_str)?,
+                    ?,
                 };
                 let runner = JavaInstallerRunner { java };
                 let loader = if cfg.loader.kind == LoaderKind::Forge {
@@ -349,7 +349,7 @@ pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Res
                 // 설치 중 크래시 대비 (§8.1): installing 기록 → 재시작 감지용
                 let prev_state = cfg.install_state;
                 cfg.install_state = InstallState::Installing;
-                store::save_instance(&paths, &cfg).map_err(err_str)?;
+                store::save_instance(&paths, &cfg)?;
 
                 // 인스톨러 전용 작업 디렉토리 — 부산물(*.jar.log 등)째로 정리
                 let work = cache
@@ -363,11 +363,11 @@ pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Res
                     Err(e) => {
                         cfg.install_state = prev_state;
                         let _ = store::save_instance(&paths, &cfg);
-                        return Err(err_str(e)); // E-LD-01 표면화
+                        return Err(e); // E-LD-01 표면화
                     }
                 };
                 cfg.install_state = InstallState::Ready;
-                store::save_instance(&paths, &cfg).map_err(err_str)?;
+                store::save_instance(&paths, &cfg)?;
                 Some(profile.version_json_path)
             }
         };
@@ -382,7 +382,7 @@ pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Res
             &ctx,
             &mut |stage, item| progress_emit_shim(&mut progress, &id_for_progress, stage, item),
         )
-        .map_err(err_str)?;
+        ?;
 
         // 4) Java (§8.4)
         progress.emit(&id, "java", "");
@@ -395,7 +395,7 @@ pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Res
                 arch: ad_arch.into(),
             }
             .resolve(prepared.merged.java_major)
-            .map_err(err_str)?,
+            ?,
         };
 
         // 5) LaunchPlan (§8.9 메모리 우선순위: 사용자 > 매니페스트 권장 > 기본)
@@ -411,7 +411,7 @@ pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Res
                     .map(|r| (r.min_memory_mb, r.max_memory_mb))
             })
             .unwrap_or((2048, 4096));
-        let account = MockAuthProvider.sign_in().map_err(err_str)?; // TODO(M3): 실계정
+        let account = MockAuthProvider.sign_in()?; // TODO(M3): 실계정
         let server = cfg.server.as_ref().and_then(|s| {
             let on = s.direct_connect_override.unwrap_or_else(|| {
                 manifest
@@ -441,11 +441,11 @@ pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Res
             },
             &ctx,
         )
-        .map_err(err_str)?;
+        ?;
 
         // 6) 실행 + 종료 감시 (§8.15-6). 게임 수명은 별도 스레드 — 커맨드는 기동 후 반환.
         cfg.last_played = Some(now_label());
-        store::save_instance(&paths, &cfg).map_err(err_str)?;
+        store::save_instance(&paths, &cfg)?;
         progress.emit(&id, "launch", &prepared.merged.id);
         let app2 = app.clone();
         let id2 = id.clone();
@@ -461,7 +461,7 @@ pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Res
         Ok(())
     })
     .await
-    .map_err(err_str)?
+    .map_err(AppError::internal)?
 }
 
 fn progress_emit_shim(progress: &mut Throttled, id: &str, stage: &str, item: &str) {

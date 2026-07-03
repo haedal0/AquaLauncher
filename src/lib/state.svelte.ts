@@ -1,7 +1,8 @@
 // 전역 UI 상태 — Svelte 5 룬 기반.
+import { normalizeError, type UiError } from "./errors";
 import type { InstanceView, ModItem } from "./types";
 
-export type DialogKind = "add" | "browse" | "progress" | "required" | "update" | null;
+export type DialogKind = "add" | "browse" | "progress" | "required" | "update" | "error" | null;
 
 export const ui = $state({
   instances: [] as InstanceView[],
@@ -13,7 +14,14 @@ export const ui = $state({
   dialog: null as DialogKind,
   pendingMod: null as ModItem | null,
   progress: { title: "", stage: "", pct: 0, file: "" },
+  error: null as UiError | null,
 });
+
+/** §9: 모든 백엔드 에러는 코드+문구+복구 액션 다이얼로그로 표면화한다. */
+export function showError(e: unknown, retry?: () => void) {
+  ui.error = { ...normalizeError(e), retry };
+  ui.dialog = "error";
+}
 
 export function current(): InstanceView | undefined {
   return ui.instances.find((i) => i.id === ui.currentId);

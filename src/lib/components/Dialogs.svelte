@@ -1,7 +1,8 @@
 <script lang="ts">
-  // 다이얼로그 5종 — 인스턴스 추가(§8.7/§8.8), 필수 모드 경고(§8.2.8),
-  // 대용량 업데이트 확인(§8.2.2), 모드 브라우저(§8.17), 진행(§8.10).
+  // 다이얼로그 6종 — 인스턴스 추가(§8.7/§8.8), 필수 모드 경고(§8.2.8),
+  // 대용량 업데이트 확인(§8.2.2), 모드 브라우저(§8.17), 진행(§8.10), 에러(§9).
   import { t } from "../i18n";
+  import { detailText, errorMessageKey, isRetryable } from "../errors";
   import {
     LOADERS,
     MC_VERSIONS,
@@ -15,7 +16,7 @@
     type ManifestPreview,
   } from "../api";
   import { startProgress, stopProgress } from "../progress";
-  import { current, recomputeDirty, ui } from "../state.svelte";
+  import { current, recomputeDirty, showError, ui } from "../state.svelte";
   import type { BrowseHit, InstanceView } from "../types";
 
   // ── 인스턴스 추가 ──
@@ -35,6 +36,7 @@
   function close() {
     if (ui.dialog === "progress") stopProgress();
     ui.dialog = null;
+    ui.error = null;
     addStep = 1;
     addManual = false;
     preview = null;
@@ -67,12 +69,29 @@
 
   async function manifestNext() {
     // §8.7 확인 모달: 서버 이름 + 출처 도메인 + 모드 수 + 총 용량
-    if (hasTauri) preview = await previewManifest(manifestUrl.trim());
+    if (hasTauri) {
+      try {
+        preview = await previewManifest(manifestUrl.trim());
+      } catch (e) {
+        // 재시도는 추가 다이얼로그로 복귀 후 재조회 (§9 E-MF-01 등)
+        showError(e, () => {
+          ui.dialog = "add";
+          void manifestNext();
+        });
+        return;
+      }
+    }
     addStep = 2;
   }
 
   async function manifestCreate() {
-    const vm = await createFromManifest(manifestUrl.trim());
+    let vm: InstanceView | null;
+    try {
+      vm = await createFromManifest(manifestUrl.trim());
+    } catch (e) {
+      showError(e, () => void manifestCreate());
+      return;
+    }
     if (vm) {
       ui.instances.push(vm);
       ui.currentId = vm.id;
@@ -88,7 +107,15 @@
 
   async function createManual() {
     const name = mName.trim() || t("add.defaultName");
-    const backendVm = await createManualInstance(name, mVer, mLoader, mColor).catch(() => null);
+    let backendVm: InstanceView | null = null;
+    if (hasTauri) {
+      try {
+        backendVm = await createManualInstance(name, mVer, mLoader, mColor);
+      } catch (e) {
+        showError(e, () => void createManual());
+        return;
+      }
+    }
     const inst: InstanceView = backendVm ?? {
       id: `manual-${Date.now()}`,
       name,
@@ -170,6 +197,25 @@
     if (hit.dep && !inst.mods.some((g) => g.items.some((i) => i.name === hit.dep))) {
       group.items.push({ name: hit.dep, file: `${hit.dep.toLowerCase()}-dep.jar`, kind: "user", enabled: true });
     }
+  }
+
+  // ── 에러 (§9: 코드 + 사용자 문구 + 복구 액션) ──
+  let errCopied = $state(false);
+  $effect(() => {
+    if (ui.dialog !== "error") errCopied = false;
+  });
+
+  function errRetry() {
+    const retry = ui.error?.retry;
+    close();
+    retry?.();
+  }
+
+  async function errCopy() {
+    if (!ui.error) return;
+    const detail = detailText(ui.error);
+    await navigator.clipboard.writeText(detail ? `${ui.error.code}\n${detail}` : ui.error.code);
+    errCopied = true;
   }
 </script>
 
@@ -342,6 +388,26 @@
   </div>
 {/if}
 
+{#if ui.dialog === "error" && ui.error}
+  <div class="ovl">
+    <div class="dlg" role="dialog" aria-modal="true" aria-label={t("err.title")}>
+      <h2>{t("err.title")}</h2>
+      <p class="dsc">{t(errorMessageKey(ui.error.code))}</p>
+      <span class="err-code">{ui.error.code}</span>
+      {#if detailText(ui.error)}
+        <div class="clog err-detail">{detailText(ui.error)}</div>
+      {/if}
+      <div class="dlg-btns">
+        <button class="btn ghost" onclick={errCopy}>{errCopied ? t("err.copied") : t("err.copy")}</button>
+        <button class="btn ghost" onclick={close}>{t("dlg.close")}</button>
+        {#if ui.error.retry && isRetryable(ui.error.code)}
+          <button class="btn th" onclick={errRetry}>{t("err.retry")}</button>
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
+
 {#if ui.dialog === "progress"}
   <div class="ovl">
     <div class="dlg" role="dialog" aria-modal="true" aria-label={ui.progress.title}>
@@ -416,4 +482,9 @@
     transition: width 0.18s; }
   .prog-file { font-size: 0.7rem; color: var(--tx-faint); margin-top: 7px;
     font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .err-code { display: inline-block; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em;
+    color: var(--danger); background: rgba(229, 97, 91, 0.1); border: 1px solid rgba(229, 97, 91, 0.35);
+    border-radius: 99px; padding: 2px 9px; margin-top: 10px; }
+  .err-detail { margin-top: 10px; max-height: 130px; overflow-y: auto;
+    font-family: ui-monospace, monospace; font-size: 0.72rem; white-space: pre-wrap; word-break: break-all; }
 </style>

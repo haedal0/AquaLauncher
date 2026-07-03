@@ -4,7 +4,7 @@
   import { ACCOUNT_NAME, hasTauri, playBackend, resetBackend } from "../api";
   import { startProgress } from "../progress";
   import type { InstanceView } from "../types";
-  import { resetToManifest, ui } from "../state.svelte";
+  import { resetToManifest, showError, ui } from "../state.svelte";
   import ModsPanel from "./ModsPanel.svelte";
 
   let { inst }: { inst: InstanceView } = $props();
@@ -36,6 +36,7 @@
         .catch((e) => {
           console.error(e);
           if (ui.dialog === "progress") ui.dialog = null;
+          showError(e, play); // §9: 코드+문구+복구 액션으로 표면화
         });
       return;
     }
@@ -44,7 +45,7 @@
 
   function resetAll() {
     resetToManifest(inst);
-    void resetBackend(inst.id);
+    resetBackend(inst.id).catch((e) => showError(e));
   }
 </script>
 
