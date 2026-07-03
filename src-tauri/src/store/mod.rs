@@ -226,6 +226,8 @@ pub struct InstanceVm {
     pub state: &'static str, // "ok" | "update" | "dirty" | "offline"
     pub play_size: Option<String>,
     pub domain: Option<String>,
+    /// 딥링크 중복 감지용 (§8.7 — 동일 출처 인스턴스 존재 시 선택지 제공)
+    pub manifest_source: Option<String>,
     pub order: i64,
     pub mods: Vec<ModGroupVm>,
 }
@@ -321,6 +323,7 @@ pub fn build_vm(paths: &Paths, cfg: &InstanceConfig, order: i64) -> InstanceVm {
         state,
         play_size: None,
         domain: cfg.manifest_source.as_deref().and_then(domain_of),
+        manifest_source: cfg.manifest_source.clone(),
         order,
         mods: vec![
             ModGroupVm { key: "required", items: required },

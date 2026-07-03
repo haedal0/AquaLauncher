@@ -1,5 +1,4 @@
 //! AquaLauncher 엔트리포인트.
-//! TODO(PRD 8.7): 딥링크(aqualauncher://) 플러그인 + 싱글 인스턴스 보장
 //! TODO(PRD 8.13): tracing 파일 로거 초기화 + panic hook
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -10,6 +9,7 @@ mod auth;
 mod browse;
 mod cache;
 mod commands;
+mod deeplink;
 mod error;
 mod launch;
 mod loaders;
@@ -26,7 +26,29 @@ fn ping() -> &'static str {
 
 fn main() {
     tauri::Builder::default()
+        // 싱글 인스턴스 보장 (§8.7) — 반드시 첫 플러그인으로 등록.
+        // deep-link 피처가 2차 실행의 딥링크를 on_open_url로 중계하므로 여기선 포커스만.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.set_focus();
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
+            // 딥링크(§8.7): 검증 통과한 매니페스트 URL만 프론트 확인 모달로 전달
+            use tauri_plugin_deep_link::DeepLinkExt;
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                use tauri::Emitter;
+                for url in event.urls() {
+                    match deeplink::parse_add_link(url.as_str()) {
+                        Ok(manifest_url) => {
+                            let _ = handle.emit("deeplink-add", manifest_url);
+                        }
+                        Err(e) => tracing::warn!(%e, "deep link rejected"),
+                    }
+                }
+            });
             let data_root = app
                 .path()
                 .app_data_dir()

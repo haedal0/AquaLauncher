@@ -34,6 +34,8 @@ export interface InstanceView {
   state: InstanceState;
   playSize: string | null;
   domain: string | null;
+  /** 딥링크 중복 감지용 원본 매니페스트 URL (§8.7) — 수동 인스턴스는 null */
+  manifestSource: string | null;
   /** 최근 플레이 정렬 키 */
   order: number;
   mods: ModGroup[];

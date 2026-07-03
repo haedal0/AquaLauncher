@@ -8,6 +8,9 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-plugin-deep-link = "2"
+# deep-link 피처: 2차 실행 argv의 딥링크를 실행 중 인스턴스의 on_open_url로 전달 (§8.7 싱글 인스턴스)
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

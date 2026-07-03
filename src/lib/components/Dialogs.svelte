@@ -9,6 +9,7 @@
     createFromManifest,
     createManualInstance,
     hasTauri,
+    onDeepLinkAdd,
     previewManifest,
     searchMods,
     type ManifestPreview,
@@ -28,6 +29,8 @@
   let mColor = $state(SWATCH_COLORS[3]);
 
   let preview = $state<ManifestPreview | null>(null);
+  /** 딥링크 중복 감지 (§8.7): 동일 manifest_source 인스턴스 → 기존 열기/새로 만들기 선택 */
+  let dupInstance = $state<InstanceView | null>(null);
 
   function close() {
     if (ui.dialog === "progress") stopProgress();
@@ -35,6 +38,31 @@
     addStep = 1;
     addManual = false;
     preview = null;
+    dupInstance = null;
+  }
+
+  // 딥링크 진입 (§8.7): URL 단계는 건너뛰고 확인 모달(미리보기)로 직행
+  onDeepLinkAdd(async (url) => {
+    addManual = false;
+    manifestUrl = url;
+    preview = null;
+    dupInstance = ui.instances.find((i) => i.manifestSource === url) ?? null;
+    ui.dialog = "add";
+    if (dupInstance) {
+      addStep = 0;
+    } else {
+      await manifestNext();
+    }
+  });
+
+  function openExisting() {
+    if (dupInstance) ui.currentId = dupInstance.id;
+    close();
+  }
+
+  async function createAnother() {
+    dupInstance = null;
+    await manifestNext();
   }
 
   async function manifestNext() {
@@ -77,6 +105,7 @@
       state: "ok",
       playSize: null,
       domain: null,
+      manifestSource: null,
       order: ui.instances.length,
       mods: [{ key: "user", items: [] }],
     };
@@ -156,7 +185,14 @@
       </div>
 
       {#if !addManual}
-        {#if addStep === 1}
+        {#if addStep === 0}
+          <p class="dsc">{t("add.dupDesc", { name: dupInstance?.name ?? "" })}</p>
+          <span class="src-domain"><i></i>{t("add.trusted", { domain: dupInstance?.domain ?? manifestUrl })}</span>
+          <div class="dlg-btns">
+            <button class="btn ghost" onclick={openExisting}>{t("add.dupOpen")}</button>
+            <button class="btn th" onclick={createAnother}>{t("add.dupNew")}</button>
+          </div>
+        {:else if addStep === 1}
           <p class="dsc">{t("add.manifestDesc")}</p>
           <div class="field">
             <label for="manifest-url">{t("add.urlLabel")}</label>

@@ -36,6 +36,7 @@ const MOCK_INSTANCES: InstanceView[] = [
     state: "ok",
     playSize: null,
     domain: "play.forest.kr",
+    manifestSource: "https://play.forest.kr/manifest.json",
     order: 0,
     mods: [
       {
@@ -75,6 +76,7 @@ const MOCK_INSTANCES: InstanceView[] = [
     state: "update",
     playSize: "1.2 GB",
     domain: "play.tech.kr",
+    manifestSource: "https://play.tech.kr/manifest.json",
     order: 1,
     mods: [
       {
@@ -104,6 +106,7 @@ const MOCK_INSTANCES: InstanceView[] = [
     state: "ok",
     playSize: null,
     domain: null,
+    manifestSource: null,
     order: 2,
     mods: [
       {
@@ -186,6 +189,11 @@ export function onProgress(cb: (p: ProgressPayload) => void): void {
 
 export function onGameExited(cb: (p: GameExitedPayload) => void): void {
   if (hasTauri) void listen<GameExitedPayload>("game-exited", (e) => cb(e.payload));
+}
+
+/** 딥링크 설치 (§8.7) — 백엔드에서 스킴/https 검증을 통과한 매니페스트 URL만 수신 */
+export function onDeepLinkAdd(cb: (manifestUrl: string) => void): void {
+  if (hasTauri) void listen<string>("deeplink-add", (e) => cb(e.payload));
 }
 
 export async function searchMods(source: "modrinth" | "curseforge", query: string): Promise<BrowseHit[]> {
