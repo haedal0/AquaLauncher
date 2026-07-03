@@ -1,0 +1,114 @@
+/* 디자인 토큰 — docs/mockup.html 의 :root 변수와 동기 유지 (PRD 8.14) */
+:root {
+  --chrome-bg: #16171b;
+  --chrome-panel: #1d1f24;
+  --chrome-raise: #25272e;
+  --chrome-line: #31343d;
+  --tx: #e8e9ec;
+  --tx-dim: #9a9daa;
+  --tx-faint: #5f6270;
+  --danger: #e5615b;
+  --warn: #e0b34c;
+  --ok: #5fbf74;
+  /* 서버 테마 — theme.ts 가 모드별로 파생 (PRD 8.5) */
+  --th: #4a9b57;
+  --th-soft: rgba(74, 155, 87, 0.16);
+  --th-tx: #a7e2b3;
+  --th-bg1: #0e1d12;
+  --th-bg2: #1b3323;
+  /* 표면 (라이트/다크 공용 변수) */
+  --surf: rgba(0, 0, 0, 0.28);
+  --surf-line: rgba(255, 255, 255, 0.07);
+  --grid-line: rgba(255, 255, 255, 0.028);
+  --tgl-off: rgba(255, 255, 255, 0.14);
+  --dock-fade: rgba(6, 8, 7, 0.92);
+  --radius: 10px;
+  font-size: 15px;
+}
+body[data-theme="light"] {
+  --chrome-bg: #eef0f4;
+  --chrome-panel: #f9fafb;
+  --chrome-raise: #e6e9ef;
+  --chrome-line: #d7dbe3;
+  --tx: #1f222a;
+  --tx-dim: #585d6a;
+  --tx-faint: #969aa7;
+  --surf: rgba(255, 255, 255, 0.66);
+  --surf-line: rgba(20, 25, 40, 0.09);
+  --grid-line: rgba(20, 25, 40, 0.045);
+  --tgl-off: rgba(20, 25, 40, 0.18);
+  --dock-fade: rgba(240, 242, 246, 0.94);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #app { height: 100%; }
+body {
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--chrome-bg);
+  color: var(--tx);
+  transition: background 0.3s;
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--th);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* ── 공용 컴포넌트 클래스 (여러 컴포넌트에서 사용 — 전역 유지) ── */
+.btn { font-size: 0.85rem; font-weight: 700; border-radius: 9px; padding: 9px 16px; }
+.btn.ghost { color: var(--tx-dim); border: 1px solid var(--chrome-line); }
+.btn.ghost:hover { color: var(--tx); }
+.btn.th { background: var(--th); color: #fff; }
+.btn.warn { background: var(--warn); color: #2a2107; }
+.btn.th:hover, .btn.warn:hover { filter: brightness(1.08); }
+
+.tgl {
+  margin-left: auto; flex: none; width: 38px; height: 21px; border-radius: 99px;
+  background: var(--tgl-off); position: relative; transition: 0.15s;
+}
+.tgl::after {
+  content: ""; position: absolute; top: 2.5px; left: 3px; width: 16px; height: 16px;
+  border-radius: 99px; background: #fff; transition: 0.15s; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.tgl[aria-checked="true"] { background: var(--th); }
+.tgl[aria-checked="true"]::after { translate: 16px 0; }
+
+.field { margin-top: 12px; }
+.field label {
+  display: block; font-size: 0.72rem; font-weight: 700; color: var(--tx-faint);
+  letter-spacing: 0.06em; margin-bottom: 5px;
+}
+input.url, select.url {
+  width: 100%; background: var(--chrome-bg); border: 1px solid var(--chrome-line);
+  border-radius: 9px; padding: 10px 12px; color: var(--tx); font-size: 0.84rem; appearance: auto;
+}
+
+.diff { display: flex; gap: 8px; margin: 14px 0; }
+.diff > div {
+  flex: 1; background: var(--chrome-bg); border: 1px solid var(--chrome-line);
+  border-radius: 9px; padding: 9px; text-align: center;
+}
+.diff b { font-size: 1.05rem; display: block; }
+.diff span { font-size: 0.68rem; color: var(--tx-faint); }
+
+.add-modes {
+  display: flex; gap: 6px; margin-top: 14px; background: var(--chrome-bg);
+  border: 1px solid var(--chrome-line); border-radius: 10px; padding: 4px;
+}
+.add-mode { flex: 1; font-size: 0.82rem; font-weight: 700; color: var(--tx-dim); padding: 8px; border-radius: 7px; }
+.add-mode.on { background: var(--chrome-raise); color: var(--tx); box-shadow: inset 0 0 0 1px var(--chrome-line); }
+
+.empty-box {
+  background: var(--surf); border: 1px dashed var(--surf-line); border-radius: 9px;
+  padding: 26px; text-align: center; font-size: 0.84rem; color: var(--tx-dim); margin-top: 14px;
+}
+.empty-box b { display: block; color: var(--tx); margin-bottom: 4px; }
+
+.mini-btn {
+  font-size: 0.74rem; font-weight: 600; border: 1px solid var(--surf-line);
+  border-radius: 7px; padding: 5px 10px; color: var(--tx-dim);
+}
+.mini-btn:hover { color: var(--tx); border-color: var(--tx-faint); }

@@ -1,0 +1,51 @@
+{
+  "format_version": 1,
+  "min_launcher_version": "0.1.0",
+  "display_version": "1",
+  "changelog": "픽스처 초기 버전",
+  "server_display_name": "픽스처 테스트 서버",
+  "server_description": "동기화 엔진 개발용 로컬 픽스처",
+  "minecraft_version": "1.20.4",
+  "loader": { "type": "fabric", "version": "0.15.7" },
+  "server": {
+    "address": "127.0.0.1",
+    "port": 25565,
+    "direct_connect_default": false
+  },
+  "recommended_jvm": { "min_memory_mb": 2048, "max_memory_mb": 4096 },
+  "theme": {
+    "primary_color": "#2f9ec4",
+    "accent_color": "#ffca28",
+    "font": "pretendard"
+  },
+  "mods": [
+    {
+      "id": "dummy-required",
+      "filename": "dummy-required-1.0.jar",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "source": { "type": "url", "url": "http://127.0.0.1:8750/mods/dummy-required-1.0.jar" },
+      "required": true
+    },
+    {
+      "id": "dummy-optional",
+      "filename": "dummy-optional-1.0.jar",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "source": { "type": "modrinth", "project_id": "XXXXXXXX", "version_id": "YYYYYYYY" },
+      "required": false,
+      "optional_group": "편의 기능",
+      "default_enabled": true,
+      "description": "옵셔널 모드 diff 테스트용"
+    }
+  ],
+  "files": [
+    {
+      "path": "config/dummy.toml",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sync_policy": "always",
+      "size_bytes": 0,
+      "source": { "type": "url", "url": "http://127.0.0.1:8750/config/dummy.toml" }
+    }
+  ]
+}

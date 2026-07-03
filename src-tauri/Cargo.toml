@@ -1,0 +1,27 @@
+[package]
+name = "aqua-launcher"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = "0.1"
+sha2 = { workspace = true }
+sha1 = { workspace = true }
+reqwest = { workspace = true }
+flate2 = "1"
+tar = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+aqua-manifest = { path = "../crates/aqua-manifest" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+# TODO(M1+): 필요 시 추가 — tokio, reqwest(https only), keyring(자격증명 저장소),
+# tauri-plugin-deep-link(PRD 8.7), tauri-plugin-updater(PRD 8.11), tracing-appender(PRD 8.13)

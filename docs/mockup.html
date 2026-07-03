@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>런처 UI 목업 — 멀티 인스턴스 마인크래프트 런처</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+  :root{
+    --chrome-bg:#16171b;
+    --chrome-panel:#1d1f24;
+    --chrome-raise:#25272e;
+    --chrome-line:#31343d;
+    --tx:#e8e9ec;
+    --tx-dim:#9a9daa;
+    --tx-faint:#5f6270;
+    --danger:#e5615b;
+    --warn:#e0b34c;
+    --ok:#5fbf74;
+    /* 서버 테마 (JS가 모드별로 파생) */
+    --th:#4a9b57;
+    --th-soft:rgba(74,155,87,.16);
+    --th-tx:#a7e2b3;
+    --th-bg1:#0e1d12;
+    --th-bg2:#1b3323;
+    /* 표면 (라이트/다크 공용 변수) */
+    --surf:rgba(0,0,0,.28);
+    --surf-line:rgba(255,255,255,.07);
+    --grid-line:rgba(255,255,255,.028);
+    --tgl-off:rgba(255,255,255,.14);
+    --dock-fade:rgba(6,8,7,.92);
+    --radius:10px;
+    font-size:15px;
+  }
+  body[data-theme="light"]{
+    --chrome-bg:#eef0f4;
+    --chrome-panel:#f9fafb;
+    --chrome-raise:#e6e9ef;
+    --chrome-line:#d7dbe3;
+    --tx:#1f222a;
+    --tx-dim:#585d6a;
+    --tx-faint:#969aa7;
+    --surf:rgba(255,255,255,.66);
+    --surf-line:rgba(20,25,40,.09);
+    --grid-line:rgba(20,25,40,.045);
+    --tgl-off:rgba(20,25,40,.18);
+    --dock-fade:rgba(240,242,246,.94);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:#0c0d10;color:var(--tx);
+    display:flex;align-items:center;justify-content:center;
+    padding:18px;transition:background .3s;
+  }
+  body[data-theme="light"]{background:#d8dce3}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--th);outline-offset:2px}
+
+  .app{
+    width:min(1180px,100%);height:min(740px,100%);
+    background:var(--chrome-bg);
+    border:1px solid var(--chrome-line);
+    border-radius:14px;overflow:hidden;
+    display:grid;grid-template-columns:264px 1fr;
+    box-shadow:0 30px 80px rgba(0,0,0,.45);
+  }
+
+  /* ===== 사이드바 ===== */
+  .side{background:var(--chrome-panel);border-right:1px solid var(--chrome-line);
+    display:flex;flex-direction:column;min-height:0}
+  .side-head{padding:16px 14px 10px}
+  .brand{display:flex;align-items:center;gap:9px;padding:2px 4px 12px}
+  .brand-cube{width:22px;height:22px;border-radius:6px;flex:none;
+    background:conic-gradient(from 45deg,#6f7687 25%,#4a4f5e 0 50%,#8b93a6 0 75%,#5a6072 0)}
+  .brand b{font-size:.95rem;letter-spacing:-.01em}
+  .brand .ver-pill{font-size:.7rem;color:var(--tx-faint);margin-left:auto;
+    border:1px solid var(--chrome-line);border-radius:99px;padding:2px 7px}
+  .theme-btn{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;
+    color:var(--tx-dim);border:1px solid var(--chrome-line);flex:none;font-size:.8rem}
+  .theme-btn:hover{color:var(--tx);background:var(--chrome-raise)}
+  .search{position:relative}
+  .search input{width:100%;background:var(--chrome-bg);border:1px solid var(--chrome-line);
+    border-radius:8px;padding:8px 10px 8px 30px;color:var(--tx);font-size:.85rem}
+  .search input::placeholder{color:var(--tx-faint)}
+  .search svg{position:absolute;left:9px;top:50%;translate:0 -50%;opacity:.45}
+  .side-label{display:flex;align-items:center;justify-content:space-between;
+    padding:12px 18px 6px;font-size:.68rem;letter-spacing:.12em;color:var(--tx-faint);font-weight:600}
+  .sort-btn{font-size:.68rem;color:var(--tx-faint);display:flex;gap:4px;align-items:center;padding:2px 4px;border-radius:5px}
+  .sort-btn:hover{color:var(--tx-dim)}
+
+  .inst-list{flex:1;overflow-y:auto;padding:2px 8px 8px;display:flex;flex-direction:column;gap:2px;min-height:0}
+  .inst-list::-webkit-scrollbar{width:8px}
+  .inst-list::-webkit-scrollbar-thumb{background:var(--chrome-raise);border-radius:99px}
+  .inst{display:flex;align-items:center;gap:10px;width:100%;
+    padding:8px 10px;border-radius:9px;text-align:left;
+    border:1px solid transparent;transition:background .12s}
+  .inst:hover{background:var(--chrome-raise)}
+  .inst.active{background:var(--chrome-raise);border-color:var(--chrome-line);box-shadow:inset 3px 0 0 var(--ic,#888)}
+  .inst-icon{width:34px;height:34px;border-radius:8px;flex:none;
+    display:grid;place-items:center;font-size:15px;
+    background:var(--ic-bg,#333);color:#fff;font-weight:700;position:relative;overflow:hidden}
+  .inst-icon::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(135deg,rgba(255,255,255,.22),transparent 55%)}
+  .inst-meta{min-width:0;flex:1}
+  .inst-name{font-size:.86rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .inst-sub{font-size:.7rem;color:var(--tx-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .badge{flex:none;font-size:.62rem;font-weight:700;padding:2.5px 6px;border-radius:99px;letter-spacing:.02em}
+  .badge.update{background:var(--ic-soft,rgba(120,160,255,.18));color:var(--ic,#9db8ff)}
+  .badge.dirty{background:rgba(224,179,76,.15);color:var(--warn)}
+  .badge.offline{background:rgba(229,97,91,.13);color:var(--danger)}
+  .side-foot{padding:10px;border-top:1px solid var(--chrome-line)}
+  .add-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;
+    border:1px dashed var(--chrome-line);border-radius:9px;padding:9px;
+    color:var(--tx-dim);font-size:.85rem;font-weight:600;transition:.12s}
+  .add-btn:hover{color:var(--tx);border-color:var(--tx-faint);border-style:solid}
+
+  /* ===== 메인 (서버 테마 영역) ===== */
+  .main{position:relative;display:flex;flex-direction:column;min-width:0;
+    background:
+      radial-gradient(1200px 500px at 80% -10%, var(--th-soft), transparent 60%),
+      linear-gradient(165deg,var(--th-bg2),var(--th-bg1) 70%);
+    transition:background .45s ease}
+  .main::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.6;
+    background-image:
+      linear-gradient(var(--grid-line) 1px,transparent 1px),
+      linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+    background-size:44px 44px;
+    mask-image:linear-gradient(to bottom,#000 0%,transparent 62%)}
+  .hero{padding:30px 34px 0;position:relative}
+  .hero-top{display:flex;align-items:flex-start;gap:16px}
+  .hero-logo{width:62px;height:62px;border-radius:14px;flex:none;
+    display:grid;place-items:center;font-size:26px;font-weight:800;color:#fff;
+    background:var(--th);box-shadow:0 8px 24px -6px var(--th);position:relative;overflow:hidden}
+  .hero-logo::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(135deg,rgba(255,255,255,.3),transparent 55%)}
+  .hero-title h1{font-size:1.55rem;font-weight:800;letter-spacing:-.02em;line-height:1.15}
+  .hero-title p{color:var(--tx-dim);font-size:.86rem;margin-top:5px;max-width:52ch}
+  .hero-tags{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .tag{font-size:.7rem;font-weight:600;color:var(--tx-dim);
+    background:var(--surf);border:1px solid var(--surf-line);
+    padding:3px 9px;border-radius:99px}
+  .tag.th{color:var(--th-tx);background:var(--th-soft);border-color:transparent}
+  .hero-acct{margin-left:auto;flex:none;display:flex;align-items:center;gap:8px;
+    background:var(--surf);border:1px solid var(--surf-line);
+    border-radius:99px;padding:5px 12px 5px 6px;font-size:.78rem;color:var(--tx-dim)}
+  .hero-acct .av{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#c98a5b,#8a5a3b)}
+
+  .strip{margin:16px 34px 0;border-radius:9px;padding:9px 13px;font-size:.8rem;
+    display:flex;align-items:center;gap:9px;border:1px solid}
+  .strip.warn{background:rgba(224,179,76,.1);border-color:rgba(224,179,76,.35);color:var(--warn)}
+  .strip.err{background:rgba(229,97,91,.1);border-color:rgba(229,97,91,.35);color:var(--danger)}
+  .strip button{margin-left:auto;font-size:.75rem;font-weight:700;text-decoration:underline;text-underline-offset:3px;flex:none}
+
+  .tabs{display:flex;gap:2px;padding:20px 34px 0;position:relative}
+  .tab{padding:8px 14px;font-size:.86rem;font-weight:600;color:var(--tx-dim);
+    border-radius:8px 8px 0 0;border-bottom:2px solid transparent}
+  .tab:hover{color:var(--tx)}
+  .tab.active{color:var(--tx);border-bottom-color:var(--th)}
+  .panel{flex:1;overflow-y:auto;padding:18px 34px 110px;position:relative;min-height:0}
+  .panel::-webkit-scrollbar{width:8px}
+  .panel::-webkit-scrollbar-thumb{background:var(--tgl-off);border-radius:99px}
+
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .card{background:var(--surf);border:1px solid var(--surf-line);
+    border-radius:var(--radius);padding:14px 16px}
+  .card h3{font-size:.72rem;letter-spacing:.1em;color:var(--tx-faint);font-weight:700;margin-bottom:9px}
+  .card .big{font-size:1.05rem;font-weight:700}
+  .card .sub{font-size:.76rem;color:var(--tx-dim);margin-top:3px}
+  .changelog{grid-column:1/-1}
+  .changelog p{font-size:.84rem;color:var(--tx-dim);line-height:1.55}
+  .changelog .ver{color:var(--th-tx);font-weight:700;font-size:.8rem;background:var(--th-soft);
+    border-radius:6px;padding:2px 8px;margin-right:8px}
+
+  .mods-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .mods-head .cnt{font-size:.8rem;color:var(--tx-dim)}
+  .reset-btn{margin-left:auto;font-size:.78rem;font-weight:700;color:var(--th-tx);
+    background:var(--th-soft);border:1px solid transparent;border-radius:8px;padding:7px 12px}
+  .reset-btn:hover{filter:brightness(1.08)}
+  .mod-group{font-size:.7rem;letter-spacing:.1em;font-weight:700;color:var(--tx-faint);margin:16px 2px 7px}
+  .mod{display:flex;align-items:center;gap:12px;
+    background:var(--surf);border:1px solid var(--surf-line);
+    border-radius:9px;padding:10px 14px;margin-bottom:6px}
+  .mod.off{opacity:.55}
+  .mod-name{font-size:.86rem;font-weight:600}
+  .mod-file{font-size:.7rem;color:var(--tx-faint);margin-top:1px}
+  .pill{font-size:.62rem;font-weight:700;padding:2px 7px;border-radius:99px;flex:none}
+  .pill.req{background:var(--surf);border:1px solid var(--surf-line);color:var(--tx-dim)}
+  .pill.opt{background:var(--th-soft);color:var(--th-tx)}
+  .pill.user{background:rgba(120,160,255,.16);color:#7d9ce8}
+  .empty-mods{background:var(--surf);border:1px dashed var(--surf-line);border-radius:9px;
+    padding:26px;text-align:center;font-size:.84rem;color:var(--tx-dim);margin-top:14px}
+  .empty-mods b{display:block;color:var(--tx);margin-bottom:4px}
+  /* 모드 브라우저 */
+  .browse-list{max-height:270px;overflow-y:auto;margin-top:12px;padding-right:2px}
+  .browse-list::-webkit-scrollbar{width:7px}
+  .browse-list::-webkit-scrollbar-thumb{background:var(--chrome-raise);border-radius:99px}
+  .b-row{display:flex;align-items:center;gap:11px;background:var(--chrome-bg);
+    border:1px solid var(--chrome-line);border-radius:9px;padding:9px 12px;margin-bottom:6px}
+  .b-ic{width:32px;height:32px;border-radius:8px;flex:none;display:grid;place-items:center;
+    font-size:14px;font-weight:800;color:#fff}
+  .b-meta{min-width:0;flex:1}
+  .b-name{font-size:.85rem;font-weight:700}
+  .b-sub{font-size:.7rem;color:var(--tx-faint);margin-top:1px}
+  .b-dep{font-size:.66rem;color:var(--th-tx);margin-top:2px}
+  .b-btn{flex:none;font-size:.75rem;font-weight:700;background:var(--th);color:#fff;
+    border-radius:7px;padding:6px 13px}
+  .b-btn:hover{filter:brightness(1.08)}
+  .b-btn.done{background:var(--chrome-raise);color:var(--tx-dim);cursor:default}
+  .b-btn.ext{background:none;border:1px solid var(--chrome-line);color:var(--tx-dim);font-weight:600}
+  .b-btn.ext:hover{color:var(--tx)}
+  .b-lock{font-size:.64rem;color:var(--warn);margin-top:2px}
+  .tgl{margin-left:auto;flex:none;width:38px;height:21px;border-radius:99px;
+    background:var(--tgl-off);position:relative;transition:.15s}
+  .tgl::after{content:"";position:absolute;top:2.5px;left:3px;width:16px;height:16px;
+    border-radius:99px;background:#fff;transition:.15s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+  .tgl[aria-checked="true"]{background:var(--th)}
+  .tgl[aria-checked="true"]::after{translate:16px 0}
+
+  .set-row{display:flex;align-items:center;gap:12px;padding:13px 2px;
+    border-bottom:1px solid var(--surf-line);font-size:.86rem}
+  .set-row .d{font-size:.74rem;color:var(--tx-faint);margin-top:2px}
+  .set-val{margin-left:auto;color:var(--tx-dim);font-size:.8rem;flex:none;display:flex;align-items:center;gap:8px}
+  .mini-btn{font-size:.74rem;font-weight:600;border:1px solid var(--surf-line);
+    border-radius:7px;padding:5px 10px;color:var(--tx-dim)}
+  .mini-btn:hover{color:var(--tx);border-color:var(--tx-faint)}
+
+  .dock{position:absolute;left:0;right:0;bottom:0;padding:16px 34px 20px;
+    display:flex;align-items:center;gap:14px;
+    background:linear-gradient(to top,var(--dock-fade) 30%,transparent)}
+  .dock-info{font-size:.76rem;color:var(--tx-dim)}
+  .dock-info b{color:var(--tx);font-weight:600}
+  .play{margin-left:auto;flex:none;display:flex;align-items:center;gap:10px;
+    background:var(--th);color:#fff;font-weight:800;font-size:1rem;letter-spacing:-.01em;
+    padding:13px 34px;border-radius:12px;
+    box-shadow:0 10px 30px -8px var(--th);transition:filter .12s,translate .12s}
+  .play:hover{filter:brightness(1.1)}
+  .play:active{translate:0 1px}
+  .play .pl-sub{font-size:.68rem;font-weight:600;opacity:.85;display:block;letter-spacing:.02em}
+  .play svg{flex:none}
+
+  /* ===== 다이얼로그 ===== */
+  .ovl{position:absolute;inset:0;background:rgba(8,9,12,.55);backdrop-filter:blur(3px);
+    display:none;place-items:center;z-index:20}
+  .ovl.on{display:grid}
+  .dlg{width:min(470px,92%);background:var(--chrome-panel);border:1px solid var(--chrome-line);
+    border-radius:14px;padding:22px;box-shadow:0 24px 60px rgba(0,0,0,.4)}
+  .dlg h2{font-size:1.05rem;font-weight:800;letter-spacing:-.01em}
+  .dlg .dsc{font-size:.84rem;color:var(--tx-dim);margin-top:7px;line-height:1.55}
+  .diff{display:flex;gap:8px;margin:14px 0}
+  .diff div{flex:1;background:var(--chrome-bg);border:1px solid var(--chrome-line);
+    border-radius:9px;padding:9px;text-align:center}
+  .diff b{font-size:1.05rem;display:block}
+  .diff span{font-size:.68rem;color:var(--tx-faint)}
+  .dlg .clog{font-size:.8rem;color:var(--tx-dim);background:var(--chrome-bg);
+    border-radius:9px;padding:10px 12px;line-height:1.5;border:1px solid var(--chrome-line)}
+  .dlg-btns{display:flex;gap:8px;margin-top:18px;justify-content:flex-end}
+  .btn{font-size:.85rem;font-weight:700;border-radius:9px;padding:9px 16px}
+  .btn.ghost{color:var(--tx-dim);border:1px solid var(--chrome-line)}
+  .btn.ghost:hover{color:var(--tx)}
+  .btn.th{background:var(--th);color:#fff}
+  .btn.warn{background:var(--warn);color:#2a2107}
+  .btn.th:hover,.btn.warn:hover{filter:brightness(1.08)}
+  .prog-wrap{margin-top:16px}
+  .prog-stage{display:flex;justify-content:space-between;font-size:.78rem;color:var(--tx-dim);margin-bottom:7px}
+  .prog-stage b{color:var(--tx)}
+  .prog-bar{height:8px;border-radius:99px;background:var(--chrome-bg);overflow:hidden;border:1px solid var(--chrome-line)}
+  .prog-bar i{display:block;height:100%;width:0%;background:var(--th);border-radius:99px;transition:width .18s}
+  .prog-file{font-size:.7rem;color:var(--tx-faint);margin-top:7px;font-variant-numeric:tabular-nums;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .src-domain{display:inline-flex;align-items:center;gap:5px;font-size:.72rem;font-weight:700;
+    color:var(--tx-dim);background:var(--chrome-bg);border:1px solid var(--chrome-line);
+    padding:3px 9px;border-radius:99px;margin-top:10px}
+  .src-domain i{width:7px;height:7px;border-radius:99px;background:var(--ok);flex:none}
+
+  /* 인스턴스 추가 다이얼로그 */
+  .add-modes{display:flex;gap:6px;margin-top:14px;background:var(--chrome-bg);
+    border:1px solid var(--chrome-line);border-radius:10px;padding:4px}
+  .add-mode{flex:1;font-size:.82rem;font-weight:700;color:var(--tx-dim);
+    padding:8px;border-radius:7px}
+  .add-mode.on{background:var(--chrome-raise);color:var(--tx);box-shadow:inset 0 0 0 1px var(--chrome-line)}
+  .field{margin-top:12px}
+  .field label{display:block;font-size:.72rem;font-weight:700;color:var(--tx-faint);
+    letter-spacing:.06em;margin-bottom:5px}
+  input.url,select.url{width:100%;background:var(--chrome-bg);border:1px solid var(--chrome-line);
+    border-radius:9px;padding:10px 12px;color:var(--tx);font-size:.84rem;appearance:auto}
+  .field-row{display:flex;gap:10px}
+  .field-row .field{flex:1;margin-top:12px}
+  .swatches{display:flex;gap:8px;margin-top:4px}
+  .swatch{width:30px;height:30px;border-radius:9px;border:2px solid transparent;
+    position:relative;transition:.12s}
+  .swatch.on{border-color:var(--tx);scale:1.08}
+  .snap-row{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.76rem;color:var(--tx-faint)}
+  .snap-row .tgl{margin-left:0;scale:.85}
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{transition:none!important;animation:none!important}
+  }
+  @media (max-width:760px){
+    body{padding:0}
+    .app{grid-template-columns:1fr;height:100%;border-radius:0;border:none}
+    .side{display:none}
+    .hero,.tabs,.panel,.dock{padding-left:18px;padding-right:18px}
+    .cards{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body data-theme="dark">
+<div class="app">
+
+  <!-- ══════════ 사이드바 ══════════ -->
+  <nav class="side" aria-label="인스턴스 목록">
+    <div class="side-head">
+      <div class="brand">
+        <div class="brand-cube" aria-hidden="true"></div>
+        <b>AquaLauncher</b>
+        <span class="ver-pill">목업 v0.2</span>
+        <button class="theme-btn" id="themeBtn" title="라이트/다크 전환" aria-label="라이트/다크 테마 전환">☀</button>
+      </div>
+      <div class="search">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="인스턴스 검색" aria-label="인스턴스 검색">
+      </div>
+    </div>
+    <div class="side-label">
+      <span>내 서버 · <span id="cnt">4</span></span>
+      <button class="sort-btn" id="sortBtn" title="정렬 전환">최근 플레이 순 ↓</button>
+    </div>
+    <div class="inst-list" id="list" role="listbox" aria-label="인스턴스"></div>
+    <div class="side-foot">
+      <button class="add-btn" id="addBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M12 5v14M5 12h14"/></svg>
+        인스턴스 추가
+      </button>
+    </div>
+  </nav>
+
+  <!-- ══════════ 메인 ══════════ -->
+  <main class="main" id="main">
+    <header class="hero">
+      <div class="hero-top">
+        <div class="hero-logo" id="hLogo">숲</div>
+        <div class="hero-title">
+          <h1 id="hName">—</h1>
+          <p id="hDesc">—</p>
+          <div class="hero-tags" id="hTags"></div>
+        </div>
+        <div class="hero-acct" title="계정 전환"><span class="av"></span><span>Steve_KR ▾</span></div>
+      </div>
+    </header>
+
+    <div class="strip warn" id="stripDirty" hidden>
+      ⚠ 비활성화된 필수 모드 있음 — 서버 접속에 실패할 수 있습니다
+      <button id="stripReset">매니페스트 상태로 초기화</button>
+    </div>
+    <div class="strip err" id="stripOffline" hidden>
+      ⚠ 동기화 확인 실패 — 마지막 동기화: 6월 28일 21:40. 마지막 정합 상태로 플레이합니다.
+      <button>재시도</button>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="home" role="tab" aria-selected="true">홈</button>
+      <button class="tab" data-tab="mods" role="tab" aria-selected="false">모드 <span id="modCnt" style="opacity:.55"></span></button>
+      <button class="tab" data-tab="settings" role="tab" aria-selected="false">설정</button>
+    </div>
+
+    <section class="panel" id="tab-home" role="tabpanel">
+      <div class="cards">
+        <div class="card changelog">
+          <h3 id="clogTitle">업데이트 노트</h3>
+          <p><span class="ver" id="hVer">v12</span><span id="hClog">—</span></p>
+        </div>
+        <div class="card"><h3>마지막 플레이</h3><div class="big" id="hLast">—</div><div class="sub" id="hSync">—</div></div>
+        <div class="card"><h3>디스크 사용량</h3><div class="big" id="hDisk">—</div><div class="sub">공유 캐시 제외</div></div>
+      </div>
+    </section>
+
+    <section class="panel" id="tab-mods" role="tabpanel" hidden>
+      <div class="mods-head">
+        <span class="cnt" id="modsSummary"></span>
+        <button class="reset-btn" id="browseBtn">＋ 모드 추가</button>
+        <button class="reset-btn" id="resetBtn" style="margin-left:0">↺ 매니페스트 상태로 초기화</button>
+      </div>
+      <div id="modsBody"></div>
+    </section>
+
+    <section class="panel" id="tab-settings" role="tabpanel" hidden>
+      <div class="set-row" id="rowDirect"><div><div>자동 접속 (Direct Connect)</div><div class="d">실행 시 타이틀 화면 없이 바로 서버 접속 · 매니페스트 권장: 켜짐</div></div>
+        <span class="set-val"><span class="tgl" role="switch" aria-checked="true" tabindex="0"></span></span></div>
+      <div class="set-row" id="rowAuto"><div><div>자동 업데이트</div><div class="d">플레이 시 매니페스트 변경사항 자동 적용</div></div>
+        <span class="set-val"><span class="tgl" role="switch" aria-checked="true" tabindex="0"></span></span></div>
+      <div class="set-row"><div><div>메모리 할당</div><div class="d">서버 권장값 사용 중 (recommended_jvm)</div></div>
+        <span class="set-val">2 GB – 4 GB <button class="mini-btn">변경</button></span></div>
+      <div class="set-row"><div><div>Java</div><div class="d">Adoptium Temurin — 자동 관리</div></div>
+        <span class="set-val">JRE 17 <button class="mini-btn">직접 지정</button></span></div>
+      <div class="set-row"><div><div>파일 검증</div><div class="d">관리 파일 전체 해시를 재검사하고 손상된 파일만 재다운로드</div></div>
+        <span class="set-val"><button class="mini-btn">검증 실행</button></span></div>
+      <div class="set-row"><div><div>인스턴스 삭제</div><div class="d">세이브는 백업 폴더로 이동 후 삭제됩니다 (기본값)</div></div>
+        <span class="set-val"><button class="mini-btn" style="color:var(--danger);border-color:rgba(229,97,91,.4)">삭제…</button></span></div>
+    </section>
+
+    <div class="dock">
+      <div class="dock-info" id="dockInfo"></div>
+      <button class="play" id="playBtn">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>
+        <span><span id="playLabel">플레이</span><span class="pl-sub" id="playSub">Fabric 1.20.4</span></span>
+      </button>
+    </div>
+
+    <!-- 대용량 업데이트 확인 (§8.2.2) -->
+    <div class="ovl" id="dlgUpdate">
+      <div class="dlg" role="dialog" aria-modal="true" aria-label="업데이트 확인">
+        <h2>업데이트 적용 — <span id="upName"></span></h2>
+        <p class="dsc">다운로드 용량이 200MB를 넘어 확인이 필요합니다.</p>
+        <div class="diff">
+          <div><b style="color:var(--ok)">+7</b><span>추가</span></div>
+          <div><b style="color:var(--warn)">3</b><span>갱신</span></div>
+          <div><b style="color:var(--danger)">−2</b><span>삭제</span></div>
+          <div><b>1.2 GB</b><span>총 용량</span></div>
+        </div>
+        <div class="clog"><b style="color:var(--tx)">v13 변경사항</b><br>Create 모드 대규모 업데이트, 월드맵 모드 추가. 사용자 추가 모드 2개는 보존됩니다.</div>
+        <div class="dlg-btns">
+          <button class="btn ghost" data-close>나중에</button>
+          <button class="btn th" id="upGo">다운로드 후 플레이</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- required 모드 경고 (§8.2.8) -->
+    <div class="ovl" id="dlgReq">
+      <div class="dlg" role="dialog" aria-modal="true" aria-label="필수 모드 경고">
+        <h2>서버 필수 모드입니다</h2>
+        <p class="dsc"><b id="reqName" style="color:var(--tx)"></b> 은(는) 서버 접속에 필요한 모드입니다. 비활성화하면 <b style="color:var(--warn)">접속 실패 또는 크래시</b>가 발생할 수 있습니다. 언제든 "매니페스트 상태로 초기화"로 되돌릴 수 있습니다.</p>
+        <div class="dlg-btns">
+          <button class="btn ghost" data-close>취소</button>
+          <button class="btn warn" id="reqGo">알고 있어요, 비활성화</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 인스턴스 추가: 매니페스트 / 직접 만들기 (§8.7 + §8.8) -->
+    <div class="ovl" id="dlgAdd">
+      <div class="dlg" role="dialog" aria-modal="true" aria-label="인스턴스 추가">
+        <h2>인스턴스 추가</h2>
+        <div class="add-modes" role="tablist">
+          <button class="add-mode on" id="modeManifest" role="tab">서버 매니페스트</button>
+          <button class="add-mode" id="modeManual" role="tab">직접 만들기</button>
+        </div>
+
+        <!-- 매니페스트 경로 -->
+        <div id="addManifest">
+          <div id="addStep1">
+            <p class="dsc">서버 운영자에게 받은 매니페스트 URL을 붙여넣으세요. 딥링크(<code>aqualauncher://</code>)를 클릭한 경우 이 단계는 건너뜁니다.</p>
+            <div class="field"><label>매니페스트 URL</label>
+              <input class="url" value="https://play.arcana-rpg.kr/manifest.json" aria-label="매니페스트 URL"></div>
+            <div class="dlg-btns">
+              <button class="btn ghost" data-close>취소</button>
+              <button class="btn th" id="addNext">확인</button>
+            </div>
+          </div>
+          <div id="addStep2" hidden>
+            <p class="dsc" style="margin-top:12px"><b style="color:var(--tx);font-size:1rem">아르카나 RPG 시즌 3</b><br>퀘스트 · 스킬 · 보스 레이드 RPG 서버</p>
+            <span class="src-domain"><i></i>play.arcana-rpg.kr · 신뢰할 수 있는 연결</span>
+            <div class="diff" style="margin-top:14px">
+              <div><b>42</b><span>모드</span></div>
+              <div><b>5</b><span>선택 모드</span></div>
+              <div><b>2.8 GB</b><span>다운로드</span></div>
+              <div><b>Forge</b><span>1.20.1</span></div>
+            </div>
+            <div class="dlg-btns">
+              <button class="btn ghost" data-close>취소</button>
+              <button class="btn th" data-close>인스턴스 만들기</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 직접 만들기 경로 -->
+        <div id="addManual" hidden>
+          <p class="dsc">매니페스트 없이 빈 인스턴스를 만듭니다. 모드는 직접 관리하게 됩니다.</p>
+          <div class="field"><label>이름</label>
+            <input class="url" id="mName" placeholder="예: 내 야생 월드" aria-label="인스턴스 이름"></div>
+          <div class="field-row">
+            <div class="field"><label>마인크래프트 버전</label>
+              <select class="url" id="mVer">
+                <option>1.21.1</option><option>1.21</option><option>1.20.6</option>
+                <option selected>1.20.4</option><option>1.20.1</option>
+                <option>1.19.2</option><option>1.18.2</option><option>1.16.5</option>
+              </select></div>
+            <div class="field"><label>로더</label>
+              <select class="url" id="mLoader">
+                <option>Vanilla</option><option selected>Fabric</option><option>Quilt</option>
+                <option>Forge</option><option>NeoForge</option>
+              </select></div>
+          </div>
+          <div class="snap-row">
+            <span class="tgl" id="mSnap" role="switch" aria-checked="false" tabindex="0"></span>
+            스냅샷 버전 표시
+          </div>
+          <div class="field"><label>아이콘 색상</label>
+            <div class="swatches" id="mSwatches"></div></div>
+          <div class="dlg-btns">
+            <button class="btn ghost" data-close>취소</button>
+            <button class="btn th" id="mCreate">만들기</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 모드 브라우저: Modrinth / CurseForge (§8.17) -->
+    <div class="ovl" id="dlgBrowse">
+      <div class="dlg" role="dialog" aria-modal="true" aria-label="모드 추가" style="width:min(540px,94%)">
+        <h2>모드 추가</h2>
+        <p class="dsc">호환 버전만 표시: <b id="browseCompat" style="color:var(--tx)">—</b> · 설치된 모드는 "사용자 추가"로 분류되어 자동 삭제되지 않습니다.</p>
+        <div class="add-modes" role="tablist">
+          <button class="add-mode on" id="srcModrinth" role="tab">Modrinth</button>
+          <button class="add-mode" id="srcCurse" role="tab">CurseForge</button>
+        </div>
+        <div class="field" style="margin-top:12px">
+          <input class="url" id="browseQ" placeholder="모드 검색 (예: sodium, jei)" aria-label="모드 검색">
+        </div>
+        <div class="browse-list" id="browseList"></div>
+        <div class="dlg-btns"><button class="btn ghost" data-close>닫기</button></div>
+      </div>
+    </div>
+
+    <!-- 진행 오버레이 (§8.10) -->
+    <div class="ovl" id="dlgProg">
+      <div class="dlg" role="dialog" aria-modal="true" aria-label="동기화 진행">
+        <h2 id="progTitle">동기화 중…</h2>
+        <div class="prog-wrap">
+          <div class="prog-stage"><b id="progStage">모드 다운로드</b><span id="progPct">0%</span></div>
+          <div class="prog-bar"><i id="progFill"></i></div>
+          <div class="prog-file" id="progFile"></div>
+        </div>
+        <div class="dlg-btns">
+          <button class="btn ghost" id="progCancel">취소 — 기존 상태 유지</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+/* ─────────── 데이터: theme은 대표색 하나, 모드별 파생은 렌더에서 ─────────── */
+const DATA = [
+  { id:"forest", name:"초록 마을 서바이벌", initial:"숲", manual:false,
+    desc:"친목 위주 야생 서버 · 시즌 4 진행 중. 마을 단위 건축과 경제 시스템이 있어요.",
+    loader:"Fabric 1.20.4", ver:"v12",
+    clog:"Sodium 0.5.8 업데이트, 마을 상점 플러그인 연동 리소스팩 갱신.",
+    last:"어제 21:32", sync:"동기화 완료 · 오늘 09:12", disk:"1.4 GB",
+    color:"#4a9b57", state:"ok", playSize:null, order:0, domain:"play.forest.kr",
+    mods:[
+      {g:"서버 필수 (매니페스트 관리)",items:[
+        {n:"Sodium",f:"sodium-0.5.8.jar",t:"req",on:true},
+        {n:"Fabric API",f:"fabric-api-0.96.11.jar",t:"req",on:true},
+        {n:"마을 경제 연동",f:"village-economy-2.1.jar",t:"req",on:true}]},
+      {g:"선택 모드 · 편의 기능",items:[
+        {n:"Xaero 미니맵",f:"xaeros-minimap-24.1.jar",t:"opt",on:true},
+        {n:"쉐이더 (Iris)",f:"iris-1.6.17.jar",t:"opt",on:false}]},
+      {g:"사용자 추가 — 자동 삭제되지 않음",items:[
+        {n:"내가 넣은 인벤토리 정리",f:"inventory-profiles.jar",t:"user",on:true}]}] },
+  { id:"tech", name:"테크노팩토리 — Create 산업서버", initial:"공", manual:false,
+    desc:"Create 중심 공업 서버. 기차망과 공장 자동화가 메인 콘텐츠입니다.",
+    loader:"NeoForge 1.20.1", ver:"v13 대기",
+    clog:"Create 대규모 업데이트 + 월드맵 모드 추가 (1.2 GB).",
+    last:"3일 전", sync:"업데이트 대기 중", disk:"3.8 GB",
+    color:"#d9932f", state:"update", playSize:"1.2 GB", order:1, domain:"play.tech.kr",
+    mods:[
+      {g:"서버 필수 (매니페스트 관리)",items:[
+        {n:"Create",f:"create-0.5.1f.jar",t:"req",on:true},
+        {n:"Create: Steam 'n' Rails",f:"snr-1.6.4.jar",t:"req",on:true}]},
+      {g:"선택 모드 · 편의 기능",items:[
+        {n:"JEI",f:"jei-15.3.jar",t:"opt",on:true}]}] },
+  { id:"arcana", name:"아르카나 RPG 시즌 3", initial:"검", manual:false,
+    desc:"퀘스트 · 스킬 · 보스 레이드. 커스텀 리소스팩으로 완전히 다른 게임이 됩니다.",
+    loader:"Forge 1.20.1", ver:"v31",
+    clog:"신규 던전 '잿빛 첨탑' 오픈, 직업 밸런스 패치.",
+    last:"6월 27일", sync:"동기화 완료 · 6월 27일", disk:"5.1 GB",
+    color:"#8b6fd8", state:"dirty", playSize:null, order:2, domain:"play.arcana-rpg.kr",
+    mods:[
+      {g:"서버 필수 (매니페스트 관리)",items:[
+        {n:"아르카나 코어",f:"arcana-core-3.2.jar",t:"req",on:true},
+        {n:"커스텀 스킬 엔진",f:"skill-engine-1.9.jar",t:"req",on:false},
+        {n:"보스 레이드",f:"raids-2.0.jar",t:"req",on:true}]},
+      {g:"선택 모드 · 편의 기능",items:[
+        {n:"데미지 표시",f:"damage-indicators.jar",t:"opt",on:true}]}] },
+  { id:"lan", name:"친구들이랑 야생 (직접 구성)", initial:"야", manual:true,
+    desc:"매니페스트 없이 직접 구성한 인스턴스. 모드는 내가 직접 관리합니다.",
+    loader:"Fabric 1.21", ver:"수동",
+    clog:"수동 인스턴스에는 매니페스트 동기화가 없습니다. 모든 파일이 사용자 소유입니다.",
+    last:"2주 전", sync:"수동 인스턴스 · 동기화 없음", disk:"0.9 GB",
+    color:"#4d94c9", state:"ok", playSize:null, order:3, domain:null,
+    mods:[
+      {g:"사용자 추가 — 자동 삭제되지 않음",items:[
+        {n:"WorldEdit",f:"worldedit-7.3.jar",t:"user",on:true},
+        {n:"Litematica",f:"litematica-0.17.jar",t:"user",on:true}]}] }
+];
+
+let cur = DATA[0];
+let light = false;
+const $ = s => document.querySelector(s);
+const badge = s => s==="update" ? '<span class="badge update">업데이트</span>'
+              : s==="dirty" ? '<span class="badge dirty">수정됨</span>'
+              : s==="offline" ? '<span class="badge offline">확인 실패</span>' : "";
+
+/* 대표색 하나에서 라이트/다크 모드별 파생 (§8.5 모드별 배경 혼합) */
+function applyThemeVars(){
+  const c = cur.color, r = document.documentElement.style;
+  r.setProperty("--th", c);
+  if(light){
+    r.setProperty("--th-soft", `color-mix(in srgb, ${c} 16%, transparent)`);
+    r.setProperty("--th-tx",   `color-mix(in srgb, ${c} 82%, black)`);
+    r.setProperty("--th-bg1",  `color-mix(in srgb, ${c} 5%, #f2f3f6)`);
+    r.setProperty("--th-bg2",  `color-mix(in srgb, ${c} 15%, #e9ebf0)`);
+  }else{
+    r.setProperty("--th-soft", `color-mix(in srgb, ${c} 18%, transparent)`);
+    r.setProperty("--th-tx",   `color-mix(in srgb, ${c} 45%, white)`);
+    r.setProperty("--th-bg1",  `color-mix(in srgb, ${c} 12%, #0b0d10)`);
+    r.setProperty("--th-bg2",  `color-mix(in srgb, ${c} 24%, #13161b)`);
+  }
+}
+
+function renderList(filter=""){
+  const list = $("#list"); list.innerHTML="";
+  const shown = DATA.filter(d=>d.name.toLowerCase().includes(filter.toLowerCase()));
+  $("#cnt").textContent = shown.length;
+  shown.forEach(d=>{
+    const b = document.createElement("button");
+    b.className = "inst"+(d.id===cur.id?" active":"");
+    b.setAttribute("role","option");
+    b.style.setProperty("--ic", d.color);
+    b.style.setProperty("--ic-bg", d.color);
+    b.style.setProperty("--ic-soft", `color-mix(in srgb, ${d.color} 18%, transparent)`);
+    b.innerHTML = `<span class="inst-icon">${d.initial}</span>
+      <span class="inst-meta"><span class="inst-name">${d.name}</span>
+      <span class="inst-sub">${d.loader}${d.manual?" · 수동":""}</span></span>${badge(d.state)}`;
+    b.onclick = ()=>{ cur=d; renderList($("#q").value); renderMain(); };
+    list.appendChild(b);
+  });
+}
+
+function renderMain(){
+  applyThemeVars();
+  $("#hLogo").textContent = cur.initial;
+  $("#hName").textContent = cur.name;
+  $("#hDesc").textContent = cur.desc;
+  $("#hTags").innerHTML = `<span class="tag th">${cur.loader}</span>` +
+    (cur.domain?`<span class="tag">${cur.domain}</span>`:`<span class="tag">수동 구성</span>`) +
+    `<span class="tag">${cur.ver}</span>`;
+  $("#clogTitle").textContent = cur.manual ? "메모" : "업데이트 노트";
+  $("#hVer").textContent = cur.ver; $("#hClog").textContent = cur.clog;
+  $("#hLast").textContent = cur.last; $("#hSync").textContent = cur.sync;
+  $("#hDisk").textContent = cur.disk;
+  $("#stripDirty").hidden = cur.state!=="dirty";
+  $("#stripOffline").hidden = cur.state!=="offline";
+  /* 수동 인스턴스: 동기화 UI 숨김 (§8.8) */
+  $("#resetBtn").hidden = cur.manual;
+  $("#rowAuto").style.display = cur.manual ? "none" : "";
+  $("#rowDirect").style.display = cur.manual ? "none" : "";
+  $("#playSub").textContent = cur.loader;
+  $("#playLabel").textContent = cur.state==="update" ? "업데이트 후 플레이" : "플레이";
+  $("#dockInfo").innerHTML = cur.state==="update"
+    ? `업데이트 대기: <b>${cur.playSize}</b> · 플레이 시 확인 후 적용`
+    : cur.state==="offline" ? `마지막 정합 상태로 실행됩니다`
+    : cur.manual ? `수동 인스턴스 · <b>Steve_KR</b> 계정으로 실행`
+    : `준비 완료 · <b>Steve_KR</b> 계정으로 접속`;
+  renderMods();
+}
+
+function renderMods(){
+  const body = $("#modsBody"); body.innerHTML="";
+  let total=0, off=0;
+  cur.mods.forEach(g=>{
+    if(!g.items.length) return;
+    const h = document.createElement("div"); h.className="mod-group"; h.textContent=g.g;
+    body.appendChild(h);
+    g.items.forEach(m=>{
+      total++; if(!m.on) off++;
+      const row = document.createElement("div");
+      row.className = "mod"+(m.on?"":" off");
+      const pill = m.t==="req"?'<span class="pill req">필수</span>'
+                 : m.t==="opt"?'<span class="pill opt">선택</span>'
+                 :'<span class="pill user">사용자</span>';
+      row.innerHTML = `<span><span class="mod-name">${m.n}</span>
+        <div class="mod-file">${m.f}${m.on?"":".disabled"}</div></span>${pill}
+        <span class="tgl" role="switch" tabindex="0" aria-checked="${m.on}" aria-label="${m.n} 활성화"></span>`;
+      const tgl = row.querySelector(".tgl");
+      const flip = ()=>{
+        if(m.t==="req" && m.on){ pending={m}; $("#reqName").textContent=m.n; show("#dlgReq"); return; }
+        m.on=!m.on; syncDirty(); renderMods();
+      };
+      tgl.onclick = flip;
+      tgl.onkeydown = e=>{ if(e.key===" "||e.key==="Enter"){e.preventDefault();flip();} };
+      body.appendChild(row);
+    });
+  });
+  if(total===0){
+    body.innerHTML = `<div class="empty-mods"><b>아직 모드가 없습니다</b>
+      mods 폴더에 파일을 넣거나, 여기로 .jar 파일을 끌어다 놓으세요.</div>`;
+  }
+  $("#modCnt").textContent = total||"";
+  $("#modsSummary").textContent = total ? `모드 ${total}개 · 비활성 ${off}개` : "모드 0개";
+}
+
+function syncDirty(){
+  if(cur.manual) return renderListMain();
+  const reqOff = cur.mods.some(g=>g.items.some(m=>m.t==="req" && !m.on));
+  if(cur.state!=="update" && cur.state!=="offline") cur.state = reqOff ? "dirty" : "ok";
+  renderListMain();
+}
+const renderListMain = ()=>{ renderList($("#q").value); renderMain(); };
+
+/* 탭 */
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>{x.classList.remove("active");x.setAttribute("aria-selected","false")});
+  t.classList.add("active"); t.setAttribute("aria-selected","true");
+  ["home","mods","settings"].forEach(id=>$("#tab-"+id).hidden = id!==t.dataset.tab);
+});
+
+/* 다이얼로그 공통 */
+let pending=null;
+const show = s=>$(s).classList.add("on");
+const hideAll = ()=>document.querySelectorAll(".ovl").forEach(o=>o.classList.remove("on"));
+document.querySelectorAll("[data-close]").forEach(b=>b.onclick=hideAll);
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") hideAll(); });
+
+$("#reqGo").onclick = ()=>{ if(pending){ pending.m.on=false; pending=null; } hideAll(); syncDirty(); renderMods(); };
+const resetAll = ()=>{ cur.mods.forEach(g=>g.items.forEach(m=>{ if(m.t==="req") m.on=true; })); syncDirty(); renderMods(); };
+$("#resetBtn").onclick = resetAll;
+$("#stripReset").onclick = resetAll;
+
+/* 플레이 */
+$("#playBtn").onclick = ()=>{
+  if(cur.state==="update"){ $("#upName").textContent=cur.name; show("#dlgUpdate"); }
+  else runProgress("실행 준비 중…", ["파일 검증","클래스패스 조립","게임 실행"]);
+};
+$("#upGo").onclick = ()=>{ hideAll(); runProgress("동기화 중…", ["모드 다운로드","리소스팩","커밋(원자적 적용)","게임 실행"], true); };
+
+let progTimer=null;
+function runProgress(title, stages, isUpdate=false){
+  show("#dlgProg"); $("#progTitle").textContent=title;
+  const files=["create-0.5.1f.jar","snr-1.6.4.jar","worldmap-1.2.jar","pack.zip","manifest.lock.json"];
+  let p=0;
+  clearInterval(progTimer);
+  progTimer=setInterval(()=>{
+    p+=Math.random()*7+3;
+    if(p>=100){ p=100; clearInterval(progTimer);
+      if(isUpdate){ cur.state="ok"; cur.ver="v13"; cur.sync="동기화 완료 · 방금 전"; cur.playSize=null; }
+      setTimeout(()=>{ hideAll(); renderListMain(); },500);
+    }
+    const stage = stages[Math.min(Math.floor(p/(100/stages.length)),stages.length-1)];
+    $("#progStage").textContent=stage;
+    $("#progPct").textContent=Math.floor(p)+"%";
+    $("#progFill").style.width=p+"%";
+    $("#progFile").textContent = p<100 ? files[Math.floor(p/22)%files.length]+"  ·  "+(Math.random()*8+2).toFixed(1)+" MB/s" : "완료";
+  },160);
+}
+$("#progCancel").onclick=()=>{ clearInterval(progTimer); hideAll(); };
+
+/* ── 인스턴스 추가: 매니페스트 / 직접 만들기 ── */
+const SWATCH_COLORS = ["#4a9b57","#d9932f","#8b6fd8","#4d94c9","#c95b7d"];
+let pickedColor = SWATCH_COLORS[3];
+function renderSwatches(){
+  const w = $("#mSwatches"); w.innerHTML="";
+  SWATCH_COLORS.forEach(c=>{
+    const b=document.createElement("button");
+    b.className="swatch"+(c===pickedColor?" on":"");
+    b.style.background=c; b.title=c; b.setAttribute("aria-label","색상 "+c);
+    b.onclick=()=>{ pickedColor=c; renderSwatches(); };
+    w.appendChild(b);
+  });
+}
+function setAddMode(manual){
+  $("#modeManifest").classList.toggle("on",!manual);
+  $("#modeManual").classList.toggle("on",manual);
+  $("#addManifest").hidden = manual;
+  $("#addManual").hidden = !manual;
+}
+$("#modeManifest").onclick=()=>setAddMode(false);
+$("#modeManual").onclick=()=>setAddMode(true);
+$("#addBtn").onclick=()=>{
+  $("#addStep1").hidden=false; $("#addStep2").hidden=true;
+  setAddMode(false); renderSwatches(); show("#dlgAdd");
+};
+$("#addNext").onclick=()=>{ $("#addStep1").hidden=true; $("#addStep2").hidden=false; };
+$("#mSnap").onclick=function(){ this.setAttribute("aria-checked", this.getAttribute("aria-checked")!=="true"); };
+$("#mCreate").onclick=()=>{
+  const name = $("#mName").value.trim() || "새 인스턴스";
+  const mcv = $("#mVer").value, ld = $("#mLoader").value;
+  const inst = {
+    id:"manual-"+Date.now(), name, initial:name[0], manual:true,
+    desc:"매니페스트 없이 직접 구성한 인스턴스. 모드는 내가 직접 관리합니다.",
+    loader:`${ld} ${mcv}`, ver:"수동",
+    clog:"수동 인스턴스에는 매니페스트 동기화가 없습니다. 모든 파일이 사용자 소유입니다.",
+    last:"—", sync:"수동 인스턴스 · 동기화 없음", disk:"0 MB",
+    color:pickedColor, state:"ok", playSize:null, order:DATA.length, domain:null,
+    mods:[{g:"사용자 추가 — 자동 삭제되지 않음",items:[]}]
+  };
+  DATA.push(inst); cur=inst;
+  hideAll(); $("#mName").value="";
+  renderListMain();
+};
+
+/* ── 모드 브라우저: Modrinth / CurseForge (§8.17) ── */
+const BROWSE_DB = {
+  modrinth: [
+    {n:"Sodium", sub:"렌더링 최적화 · 다운로드 4.2M", ic:"S", c:"#3a9e6b", file:"sodium-0.5.8.jar"},
+    {n:"Lithium", sub:"틱 최적화 · 다운로드 2.8M", ic:"L", c:"#5aa8d6", file:"lithium-0.12.1.jar"},
+    {n:"Iris Shaders", sub:"쉐이더 로더 · 다운로드 3.1M", ic:"I", c:"#7b68c9", file:"iris-1.6.17.jar",
+     dep:"의존성: Sodium — 함께 설치됩니다"},
+    {n:"ModMenu", sub:"모드 설정 메뉴 · 다운로드 3.9M", ic:"M", c:"#c98a3d", file:"modmenu-9.0.jar"}
+  ],
+  curse: [
+    {n:"JEI (Just Enough Items)", sub:"아이템/조합법 열람 · 다운로드 9.7M", ic:"J", c:"#c9564a", file:"jei-15.3.jar"},
+    {n:"JourneyMap", sub:"실시간 지도 · 다운로드 8.1M", ic:"J", c:"#4a8fc9", file:"journeymap-5.9.jar"},
+    {n:"AppleSkin", sub:"허기/포만도 표시 · 다운로드 6.4M", ic:"A", c:"#6aa84f", file:"appleskin-2.5.jar"},
+    {n:"어떤 배포제한 모드", sub:"예시 · 제작자가 API 배포를 제한함", ic:"?", c:"#8a8f9c",
+     optOut:true}
+  ]
+};
+let browseSrc = "modrinth";
+const installedSet = new Set();
+
+function userGroup(){
+  let g = cur.mods.find(x=>x.g.startsWith("사용자"));
+  if(!g){ g = {g:"사용자 추가 — 자동 삭제되지 않음", items:[]}; cur.mods.push(g); }
+  return g;
+}
+
+function renderBrowse(){
+  const q = $("#browseQ").value.trim().toLowerCase();
+  const list = $("#browseList"); list.innerHTML="";
+  BROWSE_DB[browseSrc]
+    .filter(m=>!q || m.n.toLowerCase().includes(q))
+    .forEach(m=>{
+      const key = browseSrc+":"+m.n;
+      const has = installedSet.has(key) || cur.mods.some(g=>g.items.some(i=>i.f===m.file));
+      const row = document.createElement("div"); row.className="b-row";
+      const action = m.optOut
+        ? `<span style="flex:none;text-align:right"><button class="b-btn ext" title="공식 페이지에서 다운로드">브라우저에서 받기 ↗</button>
+           <div class="b-lock">런처 내 다운로드 제한</div></span>`
+        : has
+        ? `<button class="b-btn done">설치됨</button>`
+        : `<button class="b-btn" data-key="${key}">설치</button>`;
+      row.innerHTML = `<span class="b-ic" style="background:${m.c}">${m.ic}</span>
+        <span class="b-meta"><span class="b-name">${m.n}</span>
+        <div class="b-sub">${m.sub}</div>${m.dep?`<div class="b-dep">↳ ${m.dep}</div>`:""}</span>${action}`;
+      const btn = row.querySelector(".b-btn:not(.ext):not(.done)");
+      if(btn) btn.onclick = ()=>{
+        installedSet.add(key);
+        const g = userGroup();
+        g.items.push({n:m.n, f:m.file, t:"user", on:true});
+        if(m.dep && !cur.mods.some(gr=>gr.items.some(i=>i.f==="sodium-0.5.8.jar")))
+          g.items.push({n:"Sodium (의존성)", f:"sodium-0.5.8.jar", t:"user", on:true});
+        renderMods(); renderBrowse();
+      };
+      list.appendChild(row);
+    });
+  if(!list.children.length)
+    list.innerHTML = `<div class="empty-mods"><b>검색 결과 없음</b>다른 검색어를 입력해 보세요.</div>`;
+}
+$("#browseBtn").onclick = ()=>{
+  $("#browseCompat").textContent = cur.loader;
+  $("#browseQ").value = ""; browseSrc="modrinth";
+  $("#srcModrinth").classList.add("on"); $("#srcCurse").classList.remove("on");
+  renderBrowse(); show("#dlgBrowse");
+};
+$("#srcModrinth").onclick = ()=>{ browseSrc="modrinth";
+  $("#srcModrinth").classList.add("on"); $("#srcCurse").classList.remove("on"); renderBrowse(); };
+$("#srcCurse").onclick = ()=>{ browseSrc="curse";
+  $("#srcCurse").classList.add("on"); $("#srcModrinth").classList.remove("on"); renderBrowse(); };
+$("#browseQ").oninput = renderBrowse;
+
+/* 검색 · 정렬 */
+$("#q").oninput = e=>renderList(e.target.value);
+let sortRecent=true;
+$("#sortBtn").onclick=()=>{
+  sortRecent=!sortRecent;
+  $("#sortBtn").textContent = sortRecent?"최근 플레이 순 ↓":"이름순 ↓";
+  DATA.sort(sortRecent ? (a,b)=>a.order-b.order : (a,b)=>a.name.localeCompare(b.name,"ko"));
+  renderList($("#q").value);
+};
+
+/* 라이트/다크 전환 (§8.14) */
+$("#themeBtn").onclick=()=>{
+  light=!light;
+  document.body.dataset.theme = light?"light":"dark";
+  $("#themeBtn").textContent = light?"☾":"☀";
+  applyThemeVars();
+};
+
+renderList(); renderMain();
+</script>
+</body>
+</html>
