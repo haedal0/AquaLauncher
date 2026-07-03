@@ -85,6 +85,7 @@ fn main() {
             commands::toggle_mod,
             commands::reset_instance,
             commands::sync_now,
+            commands::check_update,
             commands::play,
         ])
         .run(tauri::generate_context!())

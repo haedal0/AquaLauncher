@@ -173,6 +173,23 @@ export async function previewManifest(url: string): Promise<ManifestPreview | nu
   return await invoke<ManifestPreview>("preview_manifest", { url });
 }
 
+/** §8.2.1/8.2.2 업데이트 확인 — 다운로드 없이 diff 요약만. 오프라인/최신이면 null. */
+export interface UpdateSummary {
+  added: number;
+  updated: number;
+  removed: number;
+  totalBytes: number;
+  /** 총 다운로드 200MB 이상 — 적용 전 확인 다이얼로그 필요 (§8.2.2) */
+  requiresConfirmation: boolean;
+  displayVersion: string;
+  changelog: string | null;
+}
+
+export async function checkUpdate(id: string): Promise<UpdateSummary | null> {
+  if (!hasTauri) return null;
+  return await invoke<UpdateSummary | null>("check_update", { id });
+}
+
 export async function toggleModBackend(id: string, path: string, enabled: boolean): Promise<void> {
   if (hasTauri) await invoke("toggle_mod", { id, path, enabled });
 }

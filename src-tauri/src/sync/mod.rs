@@ -146,6 +146,58 @@ pub fn plan_diff(
     actions
 }
 
+/// §8.2.2 대용량 업데이트 확인 임계값 — 총 다운로드가 이 값 이상이면
+/// 다운로드 시작 전 diff 요약 확인 다이얼로그, 미만이면 자동 진행.
+pub const LARGE_UPDATE_BYTES: u64 = 200 * 1024 * 1024;
+
+/// diff 요약 (§8.2.2): 추가 N / 갱신 M / 삭제 K + 총 다운로드 용량.
+#[derive(Debug, PartialEq, Eq, serde::Serialize)]
+pub struct DiffSummary {
+    pub added: usize,
+    pub updated: usize,
+    pub removed: usize,
+    pub total_bytes: u64,
+}
+
+impl DiffSummary {
+    pub fn requires_confirmation(&self) -> bool {
+        self.total_bytes >= LARGE_UPDATE_BYTES
+    }
+}
+
+/// plan_diff 결과를 사용자 확인용으로 요약. 용량은 매니페스트 선언값(size_bytes) 합산.
+pub fn summarize_diff(actions: &[DiffAction], manifest: &Manifest) -> DiffSummary {
+    let mut size_of: BTreeMap<String, u64> = BTreeMap::new();
+    for m in &manifest.mods {
+        size_of.insert(format!("mods/{}", m.filename), m.size_bytes);
+    }
+    for f in &manifest.files {
+        size_of.insert(f.path.clone(), f.size_bytes);
+    }
+    if let Some(rp) = &manifest.resourcepack {
+        size_of.insert(format!("resourcepacks/{}", rp.filename), rp.size_bytes);
+    }
+
+    let mut sum = DiffSummary { added: 0, updated: 0, removed: 0, total_bytes: 0 };
+    for a in actions {
+        match a {
+            DiffAction::Download { path } => {
+                sum.added += 1;
+                sum.total_bytes += size_of.get(path.as_str()).copied().unwrap_or(0);
+            }
+            DiffAction::Update { path, .. } | DiffAction::UpdateKeepDisabled { path, .. } => {
+                sum.updated += 1;
+                sum.total_bytes += size_of.get(path.as_str()).copied().unwrap_or(0);
+            }
+            DiffAction::Remove { .. } => sum.removed += 1,
+            DiffAction::Keep { .. }
+            | DiffAction::SkipOptionalUnselected { .. }
+            | DiffAction::PreserveUserFile { .. } => {}
+        }
+    }
+    sum
+}
+
 /// 커밋 성공 시 기록할 lockfile 전문 — PRD 7.4 origin 규칙 구현.
 ///
 /// 매칭된 기존 항목의 origin 승계:
@@ -445,5 +497,34 @@ mod diff_checklist {
         let m = manifest_with(vec![optional(mod_entry("minimap", "map-1.jar", "ccc"))], vec![]);
         let acts = plan_diff(&m, &lock_with(vec![]), &no_selection());
         assert_eq!(acts, [DiffAction::Download { path: "mods/map-1.jar".into() }]);
+    }
+
+    /// §8.2.2: 확인 다이얼로그용 요약 — 추가/갱신/삭제 카운트 + 다운로드 대상만 용량 합산.
+    #[test]
+    fn summary_counts_and_bytes_for_confirmation_dialog() {
+        let mut new_mod = mod_entry("create", "create-0.6.jar", "new1");
+        new_mod.size_bytes = 100;
+        let mut upd_mod = mod_entry("sodium", "sodium-0.6.jar", "new2");
+        upd_mod.size_bytes = 50;
+        let mut kept = mod_entry("jei", "jei-15.jar", "same");
+        kept.size_bytes = 999; // Keep은 다운로드 없음 — 합산 제외 검증
+        let m = manifest_with(vec![new_mod, upd_mod, kept], vec![]);
+        let l = lock_with(vec![
+            managed("mods/sodium-0.5.jar", Some("sodium"), "old2", Origin::Manifest, true),
+            managed("mods/jei-15.jar", Some("jei"), "same", Origin::Manifest, true),
+            managed("mods/gone.jar", Some("gone"), "zzz", Origin::Manifest, true),
+        ]);
+        let acts = plan_diff(&m, &l, &no_selection());
+        let s = summarize_diff(&acts, &m);
+        assert_eq!(s, DiffSummary { added: 1, updated: 1, removed: 1, total_bytes: 150 });
+    }
+
+    #[test]
+    fn large_update_threshold_is_200mb() {
+        let at = DiffSummary { added: 0, updated: 0, removed: 0, total_bytes: LARGE_UPDATE_BYTES };
+        let below =
+            DiffSummary { added: 0, updated: 0, removed: 0, total_bytes: LARGE_UPDATE_BYTES - 1 };
+        assert!(at.requires_confirmation());
+        assert!(!below.requires_confirmation());
     }
 }

@@ -9,12 +9,15 @@
     SWATCH_COLORS,
     createFromManifest,
     createManualInstance,
+    fetchInstances,
     hasTauri,
     onDeepLinkAdd,
+    playBackend,
     previewManifest,
     searchMods,
     type ManifestPreview,
   } from "../api";
+  import { fmtBytes } from "../format";
   import { startProgress, stopProgress } from "../progress";
   import { current, recomputeDirty, showError, ui } from "../state.svelte";
   import type { BrowseHit, InstanceView } from "../types";
@@ -99,12 +102,6 @@
     close();
   }
 
-  function fmtBytes(n: number): string {
-    if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(1)} GB`;
-    if (n >= 1 << 20) return `${(n / (1 << 20)).toFixed(1)} MB`;
-    return `${n} B`;
-  }
-
   async function createManual() {
     const name = mName.trim() || t("add.defaultName");
     let backendVm: InstanceView | null = null;
@@ -153,18 +150,36 @@
     close();
   }
 
-  // ── 대용량 업데이트 확인 → 동기화 진행 ──
+  // ── 대용량 업데이트 확인(§8.2.2) → 동기화+실행 진행 ──
+  /** 현재 인스턴스의 plan_diff 실측 요약 — 없으면(브라우저 dev) 배지 값 폴백 */
+  let upd = $derived(ui.updateSummaries[ui.currentId]);
+
   function applyUpdate() {
     const inst = current();
     ui.dialog = null;
+    if (!inst) return;
+    if (hasTauri) {
+      // 실 파이프라인: play가 동기화(스테이징→커밋) 후 실행까지 수행 (§8.2.1)
+      ui.progress = { title: t("prog.syncing"), stage: t("prog.stage.sync"), pct: 0, file: "" };
+      ui.dialog = "progress";
+      playBackend(inst.id)
+        .then(() => {
+          if (ui.dialog === "progress") ui.dialog = null;
+          delete ui.updateSummaries[inst.id];
+          fetchInstances().then((list) => (ui.instances = list));
+        })
+        .catch((e) => {
+          if (ui.dialog === "progress") ui.dialog = null;
+          showError(e);
+        });
+      return;
+    }
     startProgress(
       t("prog.syncing"),
       [t("prog.stage.mods"), t("prog.stage.resourcepack"), t("prog.stage.commit"), t("prog.stage.launch")],
       () => {
-        if (inst) {
-          inst.state = "ok";
-          inst.playSize = null;
-        }
+        inst.state = "ok";
+        inst.playSize = null;
       },
     );
   }
@@ -330,14 +345,14 @@
     <div class="dlg" role="dialog" aria-modal="true" aria-label={t("update.title", { name: current()?.name ?? "" })}>
       <h2>{t("update.title", { name: current()?.name ?? "" })}</h2>
       <p class="dsc">{t("update.desc")}</p>
-      <!-- TODO(M4): plan_diff 요약(추가/갱신/삭제/총 용량)으로 채움 -->
+      <!-- §8.2.2: plan_diff 실측 요약. 브라우저 dev(요약 없음)는 배지 값 폴백 -->
       <div class="diff">
-        <div><b class="ok-tx">+7</b><span>{t("update.added")}</span></div>
-        <div><b class="warn-tx">3</b><span>{t("update.changed")}</span></div>
-        <div><b class="danger-tx">−2</b><span>{t("update.removed")}</span></div>
-        <div><b>{current()?.playSize ?? "—"}</b><span>{t("update.total")}</span></div>
+        <div><b class="ok-tx">+{upd?.added ?? "—"}</b><span>{t("update.added")}</span></div>
+        <div><b class="warn-tx">{upd?.updated ?? "—"}</b><span>{t("update.changed")}</span></div>
+        <div><b class="danger-tx">−{upd?.removed ?? "—"}</b><span>{t("update.removed")}</span></div>
+        <div><b>{upd ? fmtBytes(upd.totalBytes) : (current()?.playSize ?? "—")}</b><span>{t("update.total")}</span></div>
       </div>
-      <div class="clog">{current()?.clog}</div>
+      <div class="clog">{upd?.changelog ?? current()?.clog}</div>
       <div class="dlg-btns">
         <button class="btn ghost" onclick={close}>{t("dlg.later")}</button>
         <button class="btn th" onclick={applyUpdate}>{t("update.go")}</button>

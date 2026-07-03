@@ -1,7 +1,8 @@
 <script lang="ts">
   // 레이아웃 — PRD 8.14: 좌측 사이드바 + 우측 테마 상세. docs/mockup.html 기준.
   import { t } from "./lib/i18n";
-  import { fetchInstances, onGameExited, onProgress } from "./lib/api";
+  import { checkUpdate, fetchInstances, hasTauri, onGameExited, onProgress } from "./lib/api";
+  import { fmtBytes } from "./lib/format";
   import { applyThemeVars } from "./lib/theme";
   import { current, showError, ui } from "./lib/state.svelte";
   import Sidebar from "./lib/components/Sidebar.svelte";
@@ -12,8 +13,27 @@
     fetchInstances().then((list) => {
       ui.instances = list;
       if (list.length && !ui.currentId) ui.currentId = list[0].id;
+      refreshUpdateBadges();
     });
   });
+
+  // §8.2.1 런처 시작 시: 해시 비교만 백그라운드 수행 → "업데이트 있음 (총 용량)" 배지.
+  // 다운로드는 하지 않는다. 오프라인이면 checkUpdate가 null — 배지 없음.
+  function refreshUpdateBadges() {
+    if (!hasTauri) return;
+    for (const { id, manifestSource } of ui.instances) {
+      if (!manifestSource) continue;
+      checkUpdate(id).then((summary) => {
+        if (!summary) return;
+        ui.updateSummaries[id] = summary;
+        const inst = ui.instances.find((i) => i.id === id);
+        if (inst && inst.state === "ok") {
+          inst.state = "update";
+          inst.playSize = fmtBytes(summary.totalBytes);
+        }
+      });
+    }
+  }
 
   // 백엔드 진행 이벤트(100ms 스로틀) → 진행 다이얼로그 (PRD 8.10)
   const stagePct: Record<string, number> = { sync: 10, loader: 25, download: 60, java: 85, launch: 97 };

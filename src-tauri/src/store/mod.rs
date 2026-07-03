@@ -243,6 +243,36 @@ fn loader_label(loader: &LoaderRef, mc: &str) -> String {
     format!("{kind} {mc}")
 }
 
+/// 인스턴스 디렉토리 실사용량 — §8.14 홈 카드/설정 탭. 공유 캐시는 구조상 제외.
+/// 심볼릭 링크는 따라가지 않는다 (§7.3 정책과 일관 + 순환 방지).
+fn dir_size(path: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(path) else { return 0 };
+    let mut total = 0u64;
+    for e in entries.flatten() {
+        let Ok(ft) = e.file_type() else { continue };
+        if ft.is_symlink() {
+            continue;
+        }
+        if ft.is_dir() {
+            total += dir_size(&e.path());
+        } else {
+            total += e.metadata().map(|m| m.len()).unwrap_or(0);
+        }
+    }
+    total
+}
+
+/// 사람이 읽는 용량 표기 — UI 전용 (i18n 불필요한 단위 기호만 사용).
+fn fmt_bytes(n: u64) -> String {
+    const GB: u64 = 1 << 30;
+    const MB: u64 = 1 << 20;
+    if n >= GB {
+        format!("{:.1} GB", n as f64 / GB as f64)
+    } else {
+        format!("{} MB", n / MB)
+    }
+}
+
 fn domain_of(url: &str) -> Option<String> {
     let rest = url.split("://").nth(1)?;
     let host = rest.split(['/', '?', '#']).next()?;
@@ -318,7 +348,7 @@ pub fn build_vm(paths: &Paths, cfg: &InstanceConfig, order: i64) -> InstanceVm {
         clog,
         last: cfg.last_played.clone().unwrap_or_else(|| "—".into()),
         sync: cfg.last_synced_at.clone().unwrap_or_else(|| "—".into()),
-        disk: "—".into(), // TODO(M4): 디렉토리 크기 계산 (설정 탭)
+        disk: fmt_bytes(dir_size(&paths.instance_dir(&cfg.id))),
         color: cfg.icon.clone().unwrap_or_else(|| "#4a9b57".into()),
         state,
         play_size: None,
@@ -373,6 +403,23 @@ pub fn reset_to_manifest(paths: &Paths, id: &str) -> io::Result<()> {
 mod tests {
     use super::*;
     use aqua_manifest::lockfile::ManagedFile;
+
+    #[test]
+    fn dir_size_sums_nested_files() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("mods/inner")).unwrap();
+        fs::write(dir.path().join("a.txt"), vec![0u8; 100]).unwrap();
+        fs::write(dir.path().join("mods/inner/b.jar"), vec![0u8; 50]).unwrap();
+        assert_eq!(dir_size(dir.path()), 150);
+        assert_eq!(dir_size(&dir.path().join("no-such")), 0);
+    }
+
+    #[test]
+    fn fmt_bytes_human_readable() {
+        assert_eq!(fmt_bytes(0), "0 MB");
+        assert_eq!(fmt_bytes(500 * (1 << 20)), "500 MB");
+        assert_eq!(fmt_bytes((15 << 30) / 10), "1.5 GB");
+    }
 
     fn paths() -> (tempfile::TempDir, Paths) {
         let dir = tempfile::tempdir().unwrap();

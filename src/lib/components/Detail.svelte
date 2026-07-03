@@ -1,7 +1,7 @@
 <script lang="ts">
   // 인스턴스 상세 — PRD 8.14: 테마 히어로 + 경고 스트립 + 탭 + 고정 플레이 도크.
   import { t } from "../i18n";
-  import { ACCOUNT_NAME, hasTauri, playBackend, resetBackend } from "../api";
+  import { ACCOUNT_NAME, fetchInstances, hasTauri, playBackend, resetBackend } from "../api";
   import { startProgress } from "../progress";
   import type { InstanceView } from "../types";
   import { resetToManifest, showError, ui } from "../state.svelte";
@@ -21,7 +21,10 @@
   }
 
   function play() {
-    if (inst.state === "update") {
+    // §8.2.2: 총 다운로드 200MB 이상만 확인 다이얼로그, 미만은 자동 진행.
+    // (브라우저 dev는 요약이 없으므로 state 배지 기준 유지)
+    const summary = ui.updateSummaries[inst.id];
+    if (summary ? summary.requiresConfirmation : inst.state === "update") {
       ui.dialog = "update";
       return;
     }
@@ -32,6 +35,9 @@
       playBackend(inst.id)
         .then(() => {
           if (ui.dialog === "progress") ui.dialog = null;
+          // 동기화가 적용됐으므로 업데이트 배지/요약 해소
+          delete ui.updateSummaries[inst.id];
+          fetchInstances().then((list) => (ui.instances = list));
         })
         .catch((e) => {
           console.error(e);

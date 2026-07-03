@@ -269,6 +269,64 @@ pub async fn sync_now(state: State<'_, AppState>, id: String) -> Result<Instance
     .map_err(AppError::internal)?
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSummaryVm {
+    pub added: usize,
+    pub updated: usize,
+    pub removed: usize,
+    pub total_bytes: u64,
+    /// §8.2.2: 200MB 이상 — 다운로드 전 확인 다이얼로그 필요
+    pub requires_confirmation: bool,
+    pub display_version: String,
+    pub changelog: Option<String>,
+}
+
+/// 업데이트 확인 — §8.2.1(시작 시 배지)·§8.2.2(대용량 확인) 공용.
+/// **다운로드는 하지 않는다.** fetch 실패는 §8.2.6 오프라인 정책 — None.
+#[tauri::command]
+pub async fn check_update(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Option<UpdateSummaryVm>, AppError> {
+    let paths = state.paths.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let cfg = store::get_instance(&paths, &id)
+            .ok_or_else(|| AppError::internal(format!("unknown instance {id}")))?;
+        let Some(url) = cfg.manifest_source.clone() else {
+            return Ok(None); // 수동 인스턴스 — 동기화 없음 (PRD 8.8)
+        };
+        let fetch = HttpFetcher::new()?;
+        let fetched = match fetch_manifest(&fetch, &url) {
+            Ok(f) => f,
+            Err(SyncError::Fetch(e)) => {
+                tracing::warn!(%e, "update check fetch failed — offline policy (PRD 8.2.6)");
+                return Ok(None);
+            }
+            Err(e) => return Err(e.into()),
+        };
+        if cfg.manifest_hash.as_deref() == Some(fetched.hash_hex.as_str()) {
+            return Ok(None);
+        }
+        // manifest_pinned여도 배지는 표시하고 적용만 막는다 (§8.2.1) — 적용 차단은 run_sync 담당
+        let lock = store::load_lockfile(&paths, &id);
+        let actions =
+            crate::sync::plan_diff(&fetched.manifest, &lock, &cfg.optional_mods_selection);
+        let s = crate::sync::summarize_diff(&actions, &fetched.manifest);
+        Ok(Some(UpdateSummaryVm {
+            requires_confirmation: s.requires_confirmation(),
+            added: s.added,
+            updated: s.updated,
+            removed: s.removed,
+            total_bytes: s.total_bytes,
+            display_version: fetched.manifest.display_version.clone(),
+            changelog: fetched.manifest.changelog.clone(),
+        }))
+    })
+    .await
+    .map_err(AppError::internal)?
+}
+
 fn platform() -> (&'static str, &'static str, &'static str, &'static str) {
     // (rules os_name, rules arch, adoptium os, adoptium arch)
     let os = if cfg!(target_os = "windows") { ("windows", "windows") } else { ("osx", "mac") };
