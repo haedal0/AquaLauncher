@@ -39,6 +39,11 @@ pub struct HttpFetcher {
 }
 
 impl HttpFetcher {
+    /// auth::http 등 동일 크레이트의 다른 HTTP 사용처용 (URL 정책 검사는 각 사용처 책임).
+    pub(crate) fn client(&self) -> &reqwest::blocking::Client {
+        &self.client
+    }
+
     pub fn new() -> Result<Self, NetError> {
         let client = reqwest::blocking::Client::builder()
             .user_agent(concat!("AquaLauncher/", env!("CARGO_PKG_VERSION")))

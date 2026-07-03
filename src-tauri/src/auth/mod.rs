@@ -1,6 +1,11 @@
 //! MS 인증 체인 — PRD 8.3. **사람 리뷰 필수 구역.**
 //! 플로우: Authorization Code + PKCE 기본, 디바이스 코드 폴백.
 //! MS/Mojang 서드파티 런처 승인(PRD 0-1) 전까지 MockAuthProvider로 개발한다.
+//! 규칙: 토큰류는 어떤 경로로도 로그/파일에 평문 출력 금지 (§8.3, §8.13).
+pub mod chain;
+pub mod http;
+pub mod pkce;
+pub mod store;
 
 #[derive(Debug, Clone)]
 pub struct AccountProfile {

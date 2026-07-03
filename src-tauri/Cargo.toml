@@ -19,6 +19,8 @@ flate2 = "1"
 tar = "0.4"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 aqua-manifest = { path = "../crates/aqua-manifest" }
+keyring = { workspace = true }
+getrandom = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
