@@ -3,7 +3,7 @@
   import { t } from "./lib/i18n";
   import { fetchInstances, onGameExited, onProgress } from "./lib/api";
   import { applyThemeVars } from "./lib/theme";
-  import { current, ui } from "./lib/state.svelte";
+  import { current, showError, ui } from "./lib/state.svelte";
   import Sidebar from "./lib/components/Sidebar.svelte";
   import Detail from "./lib/components/Detail.svelte";
   import Dialogs from "./lib/components/Dialogs.svelte";
@@ -23,8 +23,12 @@
     ui.progress.pct = stagePct[p.stage] ?? ui.progress.pct;
     ui.progress.file = p.item;
   });
-  onGameExited(() => {
+  onGameExited((p) => {
     fetchInstances().then((list) => (ui.instances = list));
+    // §9 E-GM-01/02: 비정상 종료 코드는 에러 다이얼로그로 표면화 (§8.12)
+    if (p.code !== null && p.code !== 0) {
+      showError({ code: p.crashLoop ? "E-GM-02" : "E-GM-01", detail: `exit code ${p.code}` });
+    }
   });
 
   // 런처 외형 라이트/다크 + 서버 테마 파생 (PRD 8.5 / 8.14)

@@ -15,6 +15,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = "0.1"
+# 진단 로깅 (PRD 8.12): 일자별 로테이션 파일 로거 + non-blocking writer
+tracing-subscriber = "0.3"
+tracing-appender = "0.2"
 sha2 = { workspace = true }
 sha1 = { workspace = true }
 reqwest = { workspace = true }
@@ -26,5 +29,4 @@ aqua-manifest = { path = "../crates/aqua-manifest" }
 [dev-dependencies]
 tempfile = { workspace = true }
 
-# TODO(M1+): 필요 시 추가 — tokio, reqwest(https only), keyring(자격증명 저장소),
-# tauri-plugin-deep-link(PRD 8.7), tauri-plugin-updater(PRD 8.11), tracing-appender(PRD 8.13)
+# TODO(M5): 필요 시 추가 — tauri-plugin-updater(PRD 8.11)

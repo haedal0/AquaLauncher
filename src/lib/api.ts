@@ -17,6 +17,8 @@ export interface ProgressPayload {
 export interface GameExitedPayload {
   id: string;
   code: number | null;
+  /** 5분 내 3회 비정상 종료 (§8.12) — true면 E-GM-02 진단 안내 */
+  crashLoop: boolean;
 }
 
 const MOCK_INSTANCES: InstanceView[] = [

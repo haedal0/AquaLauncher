@@ -4,7 +4,7 @@ use crate::auth::{AuthProvider, MockAuthProvider};
 use crate::error::AppError;
 use crate::launch::install::{build_launch_plan, prepare_version, LaunchConfig};
 use crate::launch::java::AdoptiumProvider;
-use crate::launch::process::spawn_and_wait;
+use crate::launch::process::{spawn_and_wait, CrashTracker};
 use crate::launch::rules::RuleContext;
 use crate::launch::JavaRuntimeProvider;
 use crate::loaders::{
@@ -18,11 +18,15 @@ use crate::sync::engine::{fetch_manifest, sync_instance, OnlineResolver, SyncErr
 use aqua_manifest::instance::InstallState;
 use aqua_manifest::manifest::LoaderKind;
 use serde::Serialize;
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 
 pub struct AppState {
     pub paths: Paths,
+    /// 크래시 루프 가드 (§8.12, E-GM-02) — 인스턴스별, 런처 세션 동안 유지.
+    pub crash_trackers: Arc<Mutex<HashMap<String, CrashTracker>>>,
 }
 
 fn vm_list(paths: &Paths) -> Vec<InstanceVm> {
@@ -243,12 +247,15 @@ fn pick_loader_version(
         .clone())
 }
 
-fn now_label() -> String {
-    let secs = std::time::SystemTime::now()
+fn unix_secs() -> u64 {
+    std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
-        .unwrap_or(0);
-    format!("unix:{secs}")
+        .unwrap_or(0)
+}
+
+fn now_label() -> String {
+    format!("unix:{}", unix_secs())
 }
 
 #[tauri::command]
@@ -274,12 +281,15 @@ fn platform() -> (&'static str, &'static str, &'static str, &'static str) {
 struct GameExited {
     id: String,
     code: Option<i32>,
+    /// 5분 내 3회 비정상 종료 (§8.12) — 프론트가 E-GM-02 진단 안내로 표면화.
+    crash_loop: bool,
 }
 
 /// 플레이 — PRD 8.2.1(플레이 시 동기화) + 8.15 파이프라인 전체.
 #[tauri::command]
 pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), AppError> {
     let paths = state.paths.clone();
+    let crash_trackers = state.crash_trackers.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let (rules_os, rules_arch, ad_os, ad_arch) = platform();
         let ctx = RuleContext::new(rules_os, rules_arch);
@@ -453,10 +463,45 @@ pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Res
             let mut args = plan.jvm_args.args.clone();
             args.push(plan.main_class.clone());
             args.extend(plan.game_args.args.clone());
-            let code = spawn_and_wait(&plan.java_path, &args, &plan.cwd, |_line| {
-                // TODO(M4): 링 버퍼 + 인앱 로그 뷰어 (PRD 8.12)
-            });
-            let _ = app2.emit("game-exited", GameExited { id: id2, code: code.ok().flatten() });
+            // §8.12: 게임 출력 tail 링 버퍼 — 비정상 종료 시 크래시 로그로 보존
+            const RING_CAP: usize = 400;
+            let mut ring: VecDeque<String> = VecDeque::with_capacity(RING_CAP);
+            let code = spawn_and_wait(&plan.java_path, &args, &plan.cwd, |line| {
+                if ring.len() == RING_CAP {
+                    ring.pop_front();
+                }
+                ring.push_back(line);
+            })
+            .ok()
+            .flatten();
+
+            let abnormal = matches!(code, Some(c) if c != 0);
+            let crash_loop = {
+                let mut map = crash_trackers.lock().expect("crash tracker lock");
+                let tracker = map.entry(id2.clone()).or_default();
+                if abnormal {
+                    tracker.record_abnormal_exit(unix_secs())
+                } else {
+                    tracker.reset();
+                    false
+                }
+            };
+            if abnormal {
+                // 마스킹(§8.13) 후 저장 — 인앱 크래시 뷰어(후속)의 입력이 된다
+                let log_dir = instance_dir.join("logs");
+                let _ = std::fs::create_dir_all(&log_dir);
+                let tail: String = ring
+                    .iter()
+                    .map(|l| crate::diag::mask(l))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let _ = std::fs::write(
+                    log_dir.join(format!("aqua-crash-{}.log", unix_secs())),
+                    tail,
+                );
+                tracing::warn!(instance = %id2, ?code, crash_loop, "game exited abnormally");
+            }
+            let _ = app2.emit("game-exited", GameExited { id: id2, code, crash_loop });
         });
         Ok(())
     })

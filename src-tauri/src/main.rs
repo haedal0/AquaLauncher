@@ -1,5 +1,4 @@
 //! AquaLauncher 엔트리포인트.
-//! TODO(PRD 8.13): tracing 파일 로거 초기화 + panic hook
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 // 골격 단계: 스텁 trait/타입의 dead_code 경고 억제. 각 모듈 구현 착수 시 해당 allow 제거.
@@ -10,6 +9,7 @@ mod browse;
 mod cache;
 mod commands;
 mod deeplink;
+mod diag;
 mod error;
 mod launch;
 mod loaders;
@@ -54,8 +54,15 @@ fn main() {
                 .app_data_dir()
                 .expect("app data dir must resolve");
             std::fs::create_dir_all(&data_root)?;
+            // 진단 (PRD 8.12): 일자별 파일 로거 + panic hook → 로컬 JSON. 외부 전송 없음.
+            let logs_dir = data_root.join("logs");
+            if let Some(guard) = diag::init_logging(&logs_dir) {
+                app.manage(guard);
+            }
+            diag::install_panic_hook(logs_dir);
             app.manage(commands::AppState {
                 paths: store::Paths { data_root },
+                crash_trackers: Default::default(),
             });
             // 시작 시 잔존 커밋 저널 복구 — TD-02 §4.3
             let state: tauri::State<commands::AppState> = app.state();
