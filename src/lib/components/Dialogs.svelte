@@ -23,8 +23,8 @@
   import { current, recomputeDirty, showError, ui } from "../state.svelte";
   import type { BrowseHit, InstanceView } from "../types";
 
-  // ── 인스턴스 추가 ──
-  let addManual = $state(false);
+  // ── 인스턴스 추가 ── (기본 탭: 직접 만들기 — 딥링크/URL 진입 시엔 매니페스트 탭)
+  let addManual = $state(true);
   let addStep = $state(1);
   let manifestUrl = $state("");
   let mName = $state("");
@@ -55,7 +55,7 @@
     ui.dialog = null;
     ui.error = null;
     addStep = 1;
-    addManual = false;
+    addManual = true;
     preview = null;
     optSel = {};
     dupInstance = null;
