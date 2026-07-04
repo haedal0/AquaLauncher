@@ -79,6 +79,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             ping,
             commands::list_instances,
+            commands::list_mc_versions,
             commands::create_manual_instance,
             commands::preview_manifest,
             commands::create_instance_from_manifest,

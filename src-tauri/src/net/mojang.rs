@@ -40,6 +40,30 @@ pub struct VersionRef {
     pub url: String,
     #[serde(default)]
     pub sha1: Option<String>,
+    /// ISO-8601 — 1.13 지원 하한(§5) 필터에 사용
+    #[serde(rename = "releaseTime", default)]
+    pub release_time: String,
+}
+
+/// MC 1.13 정식 릴리스 시각 — 이보다 오래된 버전은 지원 범위 밖 (§5, E-MF-05와 동일 하한).
+/// ISO-8601 문자열은 사전순 비교가 시간순 비교와 일치한다.
+pub const MC_113_RELEASE_TIME: &str = "2018-07-18";
+
+impl VersionManifest {
+    /// 수동 인스턴스 생성 드롭다운용 버전 id 목록 (최신순 유지).
+    /// release는 항상, snapshot은 옵션, old_beta/old_alpha는 항상 제외.
+    pub fn selectable_ids(&self, include_snapshots: bool) -> Vec<String> {
+        self.versions
+            .iter()
+            .filter(|v| match v.kind.as_str() {
+                "release" => true,
+                "snapshot" => include_snapshots,
+                _ => false,
+            })
+            .filter(|v| v.release_time.as_str() >= MC_113_RELEASE_TIME)
+            .map(|v| v.id.clone())
+            .collect()
+    }
 }
 
 /// asset index 본문 — objects: "경로" -> {hash, size}
@@ -117,6 +141,26 @@ mod tests {
         ));
     }
 
+    /// §5 지원 범위: 1.13 미만·old_beta/alpha 제외, snapshot은 옵션.
+    #[test]
+    fn selectable_ids_respects_113_floor_and_snapshot_toggle() {
+        let manifest: VersionManifest = serde_json::from_str(
+            r#"{
+              "latest": {"release": "1.21.1", "snapshot": "24w33a"},
+              "versions": [
+                {"id": "24w33a", "type": "snapshot", "url": "https://m/s.json", "releaseTime": "2024-08-15T12:00:00+00:00"},
+                {"id": "1.21.1", "type": "release", "url": "https://m/r.json", "releaseTime": "2024-08-08T12:24:45+00:00"},
+                {"id": "1.13", "type": "release", "url": "https://m/13.json", "releaseTime": "2018-07-18T15:11:46+00:00"},
+                {"id": "1.12.2", "type": "release", "url": "https://m/12.json", "releaseTime": "2017-09-18T08:39:46+00:00"},
+                {"id": "b1.8.1", "type": "old_beta", "url": "https://m/b.json", "releaseTime": "2011-09-19T22:00:00+00:00"}
+              ]
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(manifest.selectable_ids(false), ["1.21.1", "1.13"]);
+        assert_eq!(manifest.selectable_ids(true), ["24w33a", "1.21.1", "1.13"]);
+    }
+
     #[test]
     fn parses_version_json_via_ref() {
         let vjson = br#"{"id": "1.20.4", "mainClass": "net.minecraft.client.main.Main",
@@ -128,6 +172,7 @@ mod tests {
             kind: "release".into(),
             url: "https://x/1.20.4.json".into(),
             sha1: None,
+            release_time: String::new(),
         };
         let vj = meta.version_json(&vref).unwrap();
         assert_eq!(vj.downloads.unwrap().client.unwrap().sha1.as_deref(), Some("c1"));

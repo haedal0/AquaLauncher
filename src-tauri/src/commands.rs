@@ -316,6 +316,20 @@ pub async fn set_optional_mod(
     .map_err(AppError::internal)?
 }
 
+/// 수동 인스턴스 생성용 MC 버전 목록 — Mojang 버전 매니페스트 실시간 조회.
+/// §5 지원 범위(1.13+) 필터는 selectable_ids가 수행. 실패 시 프론트가 정적 목록 폴백.
+#[tauri::command]
+pub async fn list_mc_versions(include_snapshots: bool) -> Result<Vec<String>, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let fetch = HttpFetcher::new()?;
+        let meta = crate::net::mojang::MojangMeta { fetch: &fetch };
+        let manifest = meta.version_manifest().map_err(AppError::internal)?;
+        Ok(manifest.selectable_ids(include_snapshots))
+    })
+    .await
+    .map_err(AppError::internal)?
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateSummaryVm {

@@ -11,6 +11,7 @@
     createManualInstance,
     fetchInstances,
     hasTauri,
+    listMcVersions,
     onDeepLinkAdd,
     playBackend,
     previewManifest,
@@ -31,6 +32,16 @@
   let mLoader = $state("Fabric");
   let mSnapshots = $state(false);
   let mColor = $state(SWATCH_COLORS[3]);
+  /** 수동 생성 MC 버전 목록 — Mojang 매니페스트 전체(1.13+), 실패 시 정적 폴백 */
+  let mcVersions = $state<string[]>([...MC_VERSIONS]);
+  $effect(() => {
+    if (ui.dialog !== "add" || !addManual) return;
+    const snaps = mSnapshots; // 토글 변경도 재조회 트리거
+    listMcVersions(snaps).then((list) => {
+      mcVersions = list;
+      if (!list.includes(mVer)) mVer = list[0] ?? mVer;
+    });
+  });
 
   let preview = $state<ManifestPreview | null>(null);
   /** 생성 확인 모달의 옵셔널 모드 선택 (§12) — 초기값은 default_enabled */
@@ -319,7 +330,7 @@
           <div class="field">
             <label for="m-ver">{t("add.mcVersion")}</label>
             <select id="m-ver" class="url" bind:value={mVer}>
-              {#each MC_VERSIONS as v (v)}<option value={v}>{v}</option>{/each}
+              {#each mcVersions as v (v)}<option value={v}>{v}</option>{/each}
             </select>
           </div>
           <div class="field">

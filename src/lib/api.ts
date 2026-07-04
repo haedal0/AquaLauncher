@@ -243,6 +243,18 @@ export async function searchMods(source: "modrinth" | "curseforge", query: strin
 }
 
 export const MC_VERSIONS = ["1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.1", "1.19.2", "1.18.2", "1.16.5"];
+
+/** Mojang 버전 매니페스트에서 지원 범위(§5, 1.13+) 버전 전체 조회.
+ *  오프라인/브라우저 dev는 정적 목록 폴백. */
+export async function listMcVersions(includeSnapshots: boolean): Promise<string[]> {
+  if (!hasTauri) return MC_VERSIONS;
+  try {
+    const list = await invoke<string[]>("list_mc_versions", { includeSnapshots });
+    return list.length ? list : MC_VERSIONS;
+  } catch {
+    return MC_VERSIONS;
+  }
+}
 export const LOADERS = ["Vanilla", "Fabric", "Quilt", "Forge", "NeoForge"];
 export const SWATCH_COLORS = ["#4a9b57", "#d9932f", "#8b6fd8", "#4d94c9", "#c95b7d"];
 export const ACCOUNT_NAME = "Steve_KR"; // TODO(M3): MockAuthProvider → 실계정
