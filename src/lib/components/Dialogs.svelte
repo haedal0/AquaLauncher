@@ -258,8 +258,8 @@
     <div class="dlg" role="dialog" aria-modal="true" aria-label={t("add.title")}>
       <h2>{t("add.title")}</h2>
       <div class="add-modes" role="tablist">
-        <button class="add-mode" class:on={!addManual} role="tab" onclick={() => (addManual = false)}>{t("add.modeManifest")}</button>
         <button class="add-mode" class:on={addManual} role="tab" onclick={() => (addManual = true)}>{t("add.modeManual")}</button>
+        <button class="add-mode" class:on={!addManual} role="tab" onclick={() => (addManual = false)}>{t("add.modeManifest")}</button>
       </div>
 
       {#if !addManual}
