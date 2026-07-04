@@ -1,5 +1,6 @@
 //! aqua-cli — 서버 운영자용 매니페스트 도구 (PRD 10.1)
 //! 원칙: 운영자는 해시/용량을 손으로 계산할 일이 없어야 한다.
+mod landing;
 mod scan;
 mod validate;
 
@@ -37,7 +38,19 @@ enum Cmd {
     /// 사용자에게 배포될 변경 요약 미리보기
     Diff { old: PathBuf, new: PathBuf },
     /// 딥링크 랜딩 페이지 정적 HTML 생성 (PRD 8.7)
-    Landing,
+    Landing {
+        /// 배포된 manifest.json의 https URL (딥링크에 포함)
+        manifest_url: String,
+        /// 서버 이름/설명을 읽어올 로컬 manifest.json (생략 시 URL 표기만)
+        #[arg(long)]
+        manifest: Option<PathBuf>,
+        /// 런처 다운로드 페이지 URL (미설치 사용자 안내 버튼)
+        #[arg(long)]
+        download_url: Option<String>,
+        /// 출력 파일
+        #[arg(long, default_value = "landing.html")]
+        out: PathBuf,
+    },
 }
 
 fn load_manifest(path: &PathBuf) -> Result<Manifest, String> {
@@ -109,6 +122,30 @@ fn main() -> ExitCode {
             }
         }
         Cmd::Diff { .. } => not_implemented("diff"),
-        Cmd::Landing => not_implemented("landing"),
+        Cmd::Landing { manifest_url, manifest, download_url, out } => {
+            let (name, desc) = match manifest.as_ref().map(load_manifest) {
+                Some(Ok(m)) => (m.server_display_name, m.server_description),
+                Some(Err(e)) => {
+                    eprintln!("오류: {e}");
+                    return ExitCode::FAILURE;
+                }
+                None => ("마인크래프트 서버".to_string(), None),
+            };
+            match landing::render(&name, desc.as_deref(), &manifest_url, download_url.as_deref())
+            {
+                Ok(html) => {
+                    if let Err(e) = fs::write(&out, html) {
+                        eprintln!("쓰기 실패: {e}");
+                        return ExitCode::FAILURE;
+                    }
+                    println!("landing 생성 완료: {} (https로 호스팅해 배포하세요)", out.display());
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("landing 실패: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
     }
 }
