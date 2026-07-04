@@ -28,8 +28,9 @@
   let addStep = $state(1);
   let manifestUrl = $state("");
   let mName = $state("");
-  let mVer = $state("1.20.4");
-  let mLoader = $state("Fabric");
+  let mVer = $state(MC_VERSIONS[0]); // 기본값: 최신 — 실목록 로드 시 갱신
+  let mVerTouched = false; // 사용자가 직접 고르기 전까지는 항상 최신을 따라간다
+  let mLoader = $state(LOADERS[0]); // 기본값: Vanilla
   let mSnapshots = $state(false);
   let mColor = $state(SWATCH_COLORS[3]);
   /** 수동 생성 MC 버전 목록 — Mojang 매니페스트 전체(1.13+), 실패 시 정적 폴백 */
@@ -39,7 +40,7 @@
     const snaps = mSnapshots; // 토글 변경도 재조회 트리거
     listMcVersions(snaps).then((list) => {
       mcVersions = list;
-      if (!list.includes(mVer)) mVer = list[0] ?? mVer;
+      if (!mVerTouched || !list.includes(mVer)) mVer = list[0] ?? mVer;
     });
   });
 
@@ -58,6 +59,7 @@
     preview = null;
     optSel = {};
     dupInstance = null;
+    mVerTouched = false;
   }
 
   // 딥링크 진입 (§8.7): URL 단계는 건너뛰고 확인 모달(미리보기)로 직행
@@ -329,7 +331,7 @@
         <div class="field-row">
           <div class="field">
             <label for="m-ver">{t("add.mcVersion")}</label>
-            <select id="m-ver" class="url" bind:value={mVer}>
+            <select id="m-ver" class="url" bind:value={mVer} onchange={() => (mVerTouched = true)}>
               {#each mcVersions as v (v)}<option value={v}>{v}</option>{/each}
             </select>
           </div>

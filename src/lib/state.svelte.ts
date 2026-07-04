@@ -5,12 +5,20 @@ import type { InstanceView, ModItem } from "./types";
 
 export type DialogKind = "add" | "browse" | "progress" | "required" | "update" | "error" | null;
 
+/** OS 테마(라이트/다크) 감지 — 런처 외형 초기값은 시스템을 따른다 (§8.14) */
+export function systemPrefersLight(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    !!window.matchMedia?.("(prefers-color-scheme: light)").matches
+  );
+}
+
 export const ui = $state({
   instances: [] as InstanceView[],
   currentId: "",
   search: "",
   sortRecent: true,
-  light: false,
+  light: systemPrefersLight(),
   tab: "home" as "home" | "mods" | "settings",
   dialog: null as DialogKind,
   pendingMod: null as ModItem | null,

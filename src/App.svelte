@@ -57,6 +57,14 @@
     const inst = current();
     if (inst) applyThemeVars(inst.color, ui.light);
   });
+
+  // OS 테마 변경 실시간 추종 — 수동 토글은 다음 OS 변경 전까지 유지
+  $effect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const onChange = (e: MediaQueryListEvent) => (ui.light = e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  });
 </script>
 
 <div class="app">
