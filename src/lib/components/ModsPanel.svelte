@@ -1,9 +1,9 @@
 <script lang="ts">
   // 모드 탭 — PRD 8.2.8 (토글/경고/초기화) + 8.17 진입점.
   import { t } from "../i18n";
-  import { resetBackend, toggleModBackend } from "../api";
+  import { hasTauri, resetBackend, setOptionalMod, toggleModBackend } from "../api";
   import type { InstanceView, ModItem } from "../types";
-  import { recomputeDirty, resetToManifest, ui } from "../state.svelte";
+  import { recomputeDirty, resetToManifest, showError, ui } from "../state.svelte";
 
   let { inst }: { inst: InstanceView } = $props();
 
@@ -21,6 +21,22 @@
       // required 모드 비활성화는 경고 다이얼로그를 거친다 (PRD 8.2.8 확정)
       ui.pendingMod = m;
       ui.dialog = "required";
+      return;
+    }
+    if (m.kind === "opt" && m.modId && hasTauri && !inst.manual) {
+      // §12: opt 토글 = 설치 선택 — 저장 후 즉시 동기화로 설치/제거 반영
+      const next = !m.enabled;
+      m.enabled = next;
+      setOptionalMod(inst.id, m.modId, next)
+        .then((vm) => {
+          if (!vm) return;
+          const i = ui.instances.findIndex((x) => x.id === vm.id);
+          if (i >= 0) ui.instances[i] = vm;
+        })
+        .catch((e) => {
+          m.enabled = !next; // 롤백
+          showError(e);
+        });
       return;
     }
     m.enabled = !m.enabled;

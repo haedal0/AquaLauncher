@@ -122,6 +122,8 @@
   "prog.stage.loader": "Preparing loader",
   "prog.stage.download": "Downloading files",
   "prog.stage.java": "Preparing Java",
+  "add.optTitle": "Optional mods — choose what to install",
+  "add.optToggleAria": "Install {name}",
   "err.title": "Something went wrong",
   "err.retry": "Retry",
   "err.copy": "Copy error details",

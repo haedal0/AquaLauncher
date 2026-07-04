@@ -33,6 +33,8 @@
   let mColor = $state(SWATCH_COLORS[3]);
 
   let preview = $state<ManifestPreview | null>(null);
+  /** 생성 확인 모달의 옵셔널 모드 선택 (§12) — 초기값은 default_enabled */
+  let optSel = $state<Record<string, boolean>>({});
   /** 딥링크 중복 감지 (§8.7): 동일 manifest_source 인스턴스 → 기존 열기/새로 만들기 선택 */
   let dupInstance = $state<InstanceView | null>(null);
 
@@ -43,6 +45,7 @@
     addStep = 1;
     addManual = false;
     preview = null;
+    optSel = {};
     dupInstance = null;
   }
 
@@ -75,6 +78,7 @@
     if (hasTauri) {
       try {
         preview = await previewManifest(manifestUrl.trim());
+        optSel = Object.fromEntries((preview?.optionals ?? []).map((o) => [o.id, o.defaultEnabled]));
       } catch (e) {
         // 재시도는 추가 다이얼로그로 복귀 후 재조회 (§9 E-MF-01 등)
         showError(e, () => {
@@ -90,7 +94,7 @@
   async function manifestCreate() {
     let vm: InstanceView | null;
     try {
-      vm = await createFromManifest(manifestUrl.trim());
+      vm = await createFromManifest(manifestUrl.trim(), optSel);
     } catch (e) {
       showError(e, () => void manifestCreate());
       return;
@@ -273,6 +277,33 @@
             <div><b>{preview?.optionalCount ?? "—"}</b><span>{t("add.stat.optional")}</span></div>
             <div><b>{preview ? fmtBytes(preview.totalBytes) : "—"}</b><span>{t("add.stat.download")}</span></div>
           </div>
+          {#if preview && preview.optionals.length}
+            <!-- §12: 생성 시 옵셔널 모드 설치 선택 — 이후 변경은 모드 탭에서 -->
+            <div class="opt-title">{t("add.optTitle")}</div>
+            <div class="opt-list">
+              {#each preview.optionals as o (o.id)}
+                <div class="opt-row">
+                  <span class="opt-meta">
+                    <span class="opt-name">{o.id}</span>
+                    {#if o.group || o.desc}
+                      <div class="opt-sub">{[o.group, o.desc].filter(Boolean).join(" · ")}</div>
+                    {/if}
+                  </span>
+                  <span
+                    class="tgl" role="switch" tabindex="0" aria-checked={optSel[o.id] ?? false}
+                    aria-label={t("add.optToggleAria", { name: o.id })}
+                    onclick={() => (optSel[o.id] = !optSel[o.id])}
+                    onkeydown={(e) => {
+                      if (e.key === " " || e.key === "Enter") {
+                        e.preventDefault();
+                        optSel[o.id] = !optSel[o.id];
+                      }
+                    }}
+                  ></span>
+                </div>
+              {/each}
+            </div>
+          {/if}
           <div class="dlg-btns">
             <button class="btn ghost" onclick={close}>{t("dlg.cancel")}</button>
             <button class="btn th" onclick={manifestCreate}>{t("add.create")}</button>
@@ -502,4 +533,15 @@
     border-radius: 99px; padding: 2px 9px; margin-top: 10px; }
   .err-detail { margin-top: 10px; max-height: 130px; overflow-y: auto;
     font-family: ui-monospace, monospace; font-size: 0.72rem; white-space: pre-wrap; word-break: break-all; }
+  .opt-title { font-size: 0.7rem; letter-spacing: 0.08em; font-weight: 700;
+    color: var(--tx-faint); margin: 14px 2px 6px; }
+  .opt-list { max-height: 180px; overflow-y: auto; padding-right: 2px; }
+  .opt-list::-webkit-scrollbar { width: 7px; }
+  .opt-list::-webkit-scrollbar-thumb { background: var(--chrome-raise); border-radius: 99px; }
+  .opt-row { display: flex; align-items: center; gap: 10px; background: var(--chrome-bg);
+    border: 1px solid var(--chrome-line); border-radius: 9px; padding: 8px 12px; margin-bottom: 6px; }
+  .opt-meta { min-width: 0; flex: 1; }
+  .opt-name { font-size: 0.82rem; font-weight: 700; }
+  .opt-sub { font-size: 0.68rem; color: var(--tx-faint); margin-top: 1px; }
+  .opt-row .tgl { margin-left: 0; scale: 0.9; flex: none; }
 </style>

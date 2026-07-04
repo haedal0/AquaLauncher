@@ -122,6 +122,8 @@
   "prog.stage.loader": "로더 준비",
   "prog.stage.download": "파일 다운로드",
   "prog.stage.java": "Java 준비",
+  "add.optTitle": "선택 모드 — 설치할 항목을 고르세요",
+  "add.optToggleAria": "{name} 설치",
   "err.title": "문제가 발생했습니다",
   "err.retry": "재시도",
   "err.copy": "상세 오류 복사",

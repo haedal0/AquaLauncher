@@ -9,7 +9,10 @@ export interface ModItem {
   name: string;
   file: string;
   kind: ModKind;
+  /** req/user: 파일 활성(§8.2.8). opt: 설치 선택(§12 optional_mods_selection) */
   enabled: boolean;
+  /** 매니페스트 관리 모드의 id — opt 토글(set_optional_mod)의 키 */
+  modId?: string | null;
 }
 
 export interface ModGroup {

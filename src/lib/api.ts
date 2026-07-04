@@ -152,9 +152,19 @@ export async function createManualInstance(
   return await invoke<InstanceView>("create_manual_instance", { name, mcVersion, loaderKind, color });
 }
 
-export async function createFromManifest(url: string): Promise<InstanceView | null> {
+export async function createFromManifest(
+  url: string,
+  optionalSelection: Record<string, boolean>,
+): Promise<InstanceView | null> {
   if (!hasTauri) return null;
-  return await invoke<InstanceView>("create_instance_from_manifest", { url });
+  return await invoke<InstanceView>("create_instance_from_manifest", { url, optionalSelection });
+}
+
+export interface PreviewOptional {
+  id: string;
+  group: string | null;
+  desc: string | null;
+  defaultEnabled: boolean;
 }
 
 export interface ManifestPreview {
@@ -166,6 +176,8 @@ export interface ManifestPreview {
   totalBytes: number;
   loaderLabel: string;
   mcVersion: string;
+  /** 생성 확인 모달의 옵셔널 모드 선택 UI용 (§12) */
+  optionals: PreviewOptional[];
 }
 
 export async function previewManifest(url: string): Promise<ManifestPreview | null> {
@@ -192,6 +204,16 @@ export async function checkUpdate(id: string): Promise<UpdateSummary | null> {
 
 export async function toggleModBackend(id: string, path: string, enabled: boolean): Promise<void> {
   if (hasTauri) await invoke("toggle_mod", { id, path, enabled });
+}
+
+/** 옵셔널 모드 설치 선택 (§12) — 저장 후 즉시 동기화 반영, 갱신된 VM 반환 */
+export async function setOptionalMod(
+  id: string,
+  modId: string,
+  install: boolean,
+): Promise<InstanceView | null> {
+  if (!hasTauri) return null;
+  return await invoke<InstanceView>("set_optional_mod", { id, modId, install });
 }
 
 export async function resetBackend(id: string): Promise<void> {

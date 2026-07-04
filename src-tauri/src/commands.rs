@@ -88,6 +88,17 @@ pub struct ManifestPreview {
     pub total_bytes: u64,
     pub loader_label: String,
     pub mc_version: String,
+    /// 생성 확인 모달의 옵셔널 모드 선택 UI용 (§12)
+    pub optionals: Vec<PreviewOptional>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewOptional {
+    pub id: String,
+    pub group: Option<String>,
+    pub desc: Option<String>,
+    pub default_enabled: bool,
 }
 
 /// 딥링크/URL 추가 확인 모달용 미리보기 — PRD 8.7 (출처 도메인 표기는 스푸핑 방어).
@@ -107,6 +118,17 @@ pub async fn preview_manifest(url: String) -> Result<ManifestPreview, AppError> 
                 + m.files.iter().map(|f| f.size_bytes).sum::<u64>(),
             loader_label: format!("{:?}", m.loader.kind),
             mc_version: m.minecraft_version.clone(),
+            optionals: m
+                .mods
+                .iter()
+                .filter(|e| !e.required)
+                .map(|e| PreviewOptional {
+                    id: e.id.clone(),
+                    group: e.optional_group.clone(),
+                    desc: e.description.clone(),
+                    default_enabled: e.default_enabled,
+                })
+                .collect(),
         })
     })
     .await
@@ -117,12 +139,14 @@ pub async fn preview_manifest(url: String) -> Result<ManifestPreview, AppError> 
 pub async fn create_instance_from_manifest(
     state: State<'_, AppState>,
     url: String,
+    optional_selection: std::collections::BTreeMap<String, bool>,
 ) -> Result<InstanceVm, AppError> {
     let paths = state.paths.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let fetch = HttpFetcher::new()?;
         let fetched = fetch_manifest(&fetch, &url)?;
-        let cfg = store::create_from_manifest(&paths, &fetched.manifest, &url)?;
+        let cfg =
+            store::create_from_manifest(&paths, &fetched.manifest, &url, &optional_selection)?;
         Ok(store::build_vm(&paths, &cfg, 0))
     })
     .await
@@ -189,7 +213,8 @@ impl Throttled {
 
 /// 동기화 수행 (내부 공용). 매니페스트 인스턴스가 아니면 no-op.
 /// fetch 실패는 §8.2.6 오프라인 정책 — 에러 대신 offline 표시를 반환.
-fn run_sync(paths: &Paths, id: &str) -> Result<bool, AppError> {
+/// force: 매니페스트 해시가 같아도 diff 재적용 — 옵셔널 선택 변경 반영용 (§12).
+fn run_sync(paths: &Paths, id: &str, force: bool) -> Result<bool, AppError> {
     let mut cfg = store::get_instance(paths, id)
         .ok_or_else(|| AppError::internal(format!("unknown instance {id}")))?;
     let Some(url) = cfg.manifest_source.clone() else {
@@ -204,7 +229,10 @@ fn run_sync(paths: &Paths, id: &str) -> Result<bool, AppError> {
         }
         Err(e) => return Err(e.into()),
     };
-    if cfg.manifest_pinned || cfg.manifest_hash.as_deref() == Some(fetched.hash_hex.as_str()) {
+    if cfg.manifest_pinned {
+        return Ok(false); // §8.2.1: 고정 인스턴스는 적용하지 않음
+    }
+    if !force && cfg.manifest_hash.as_deref() == Some(fetched.hash_hex.as_str()) {
         return Ok(false);
     }
     let lock = store::load_lockfile(paths, id);
@@ -262,7 +290,26 @@ fn now_label() -> String {
 pub async fn sync_now(state: State<'_, AppState>, id: String) -> Result<InstanceVm, AppError> {
     let paths = state.paths.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        run_sync(&paths, &id)?;
+        run_sync(&paths, &id, false)?;
+        vm_one(&paths, &id)
+    })
+    .await
+    .map_err(AppError::internal)?
+}
+
+/// 옵셔널 모드 설치 선택 (§12) — 저장 후 즉시 강제 동기화로 반영.
+/// 오프라인이면 선택만 저장되고 다음 동기화에서 적용된다 (§8.2.6).
+#[tauri::command]
+pub async fn set_optional_mod(
+    state: State<'_, AppState>,
+    id: String,
+    mod_id: String,
+    install: bool,
+) -> Result<InstanceVm, AppError> {
+    let paths = state.paths.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        store::set_optional_selection(&paths, &id, &mod_id, install)?;
+        run_sync(&paths, &id, true)?;
         vm_one(&paths, &id)
     })
     .await
@@ -356,7 +403,7 @@ pub async fn play(app: AppHandle, state: State<'_, AppState>, id: String) -> Res
 
         // 1) 동기화 (§8.2.1 플레이 버튼 트리거)
         progress.emit(&id, "sync", "");
-        run_sync(&paths, &id)?;
+        run_sync(&paths, &id, false)?;
 
         let mut cfg = store::get_instance(&paths, &id)
             .ok_or_else(|| AppError::internal(format!("unknown instance {id}")))?;

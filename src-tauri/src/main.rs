@@ -83,6 +83,7 @@ fn main() {
             commands::preview_manifest,
             commands::create_instance_from_manifest,
             commands::toggle_mod,
+            commands::set_optional_mod,
             commands::reset_instance,
             commands::sync_now,
             commands::check_update,

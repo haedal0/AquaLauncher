@@ -146,10 +146,12 @@ pub fn create_manual(
 }
 
 /// 매니페스트 인스턴스 생성 — PRD 8.7/8.8. 파일 동기화는 이후 sync 단계가 수행.
+/// selection: 생성 확인 모달의 옵셔널 모드 선택(§12) — 매니페스트에 있는 optional id만 반영.
 pub fn create_from_manifest(
     paths: &Paths,
     manifest: &Manifest,
     manifest_url: &str,
+    selection: &std::collections::BTreeMap<String, bool>,
 ) -> io::Result<InstanceConfig> {
     let cfg = InstanceConfig {
         id: new_id(),
@@ -178,7 +180,10 @@ pub fn create_from_manifest(
             .mods
             .iter()
             .filter(|m| !m.required)
-            .map(|m| (m.id.clone(), m.default_enabled))
+            .map(|m| {
+                let chosen = selection.get(&m.id).copied().unwrap_or(m.default_enabled);
+                (m.id.clone(), chosen)
+            })
             .collect(),
         created_at: now_unix(),
         last_played: None,
@@ -198,7 +203,10 @@ pub struct ModItemVm {
     pub name: String,
     pub file: String,
     pub kind: &'static str, // "req" | "opt" | "user"
+    /// req/user: 파일 활성(§8.2.8 rename). opt: 설치 선택(§12 optional_mods_selection).
     pub enabled: bool,
+    /// 매니페스트 관리 모드의 id — opt 토글(set_optional_mod)의 키.
+    pub mod_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -289,7 +297,8 @@ pub fn build_vm(paths: &Paths, cfg: &InstanceConfig, order: i64) -> InstanceVm {
     let manifest = load_cached_manifest(paths, &cfg.id);
     let manual = cfg.manifest_source.is_none();
 
-    // 모드 그룹: 매니페스트 기준 required/optional 분류, lockfile 기준 user/enabled
+    // 모드 그룹 — required/user는 lockfile(설치된 파일) 기준,
+    // optional은 매니페스트 기준: 미설치 항목도 나열하고 토글=설치 선택 (§12)
     let mut required = Vec::new();
     let mut optional = Vec::new();
     let mut user = Vec::new();
@@ -299,7 +308,13 @@ pub fn build_vm(paths: &Paths, cfg: &InstanceConfig, order: i64) -> InstanceVm {
         }
         let file = filename_of(&mf.path).to_string();
         if mf.origin == Origin::User {
-            user.push(ModItemVm { name: file.clone(), file, kind: "user", enabled: mf.enabled });
+            user.push(ModItemVm {
+                name: file.clone(),
+                file,
+                kind: "user",
+                enabled: mf.enabled,
+                mod_id: None,
+            });
             continue;
         }
         let entry = manifest.as_ref().and_then(|m| {
@@ -307,20 +322,29 @@ pub fn build_vm(paths: &Paths, cfg: &InstanceConfig, order: i64) -> InstanceVm {
                 .iter()
                 .find(|e| Some(&e.id) == mf.mod_id.as_ref() || e.filename == file)
         });
-        let (name, is_required) = match entry {
-            Some(e) => (e.id.clone(), e.required),
-            None => (file.clone(), true),
+        let (name, mod_id, is_required) = match entry {
+            Some(e) => (e.id.clone(), Some(e.id.clone()), e.required),
+            None => (file.clone(), None, true),
         };
-        let item = ModItemVm {
-            name,
-            file,
-            kind: if is_required { "req" } else { "opt" },
-            enabled: mf.enabled,
-        };
-        if is_required {
-            required.push(item);
-        } else {
-            optional.push(item);
+        if !is_required {
+            continue; // optional은 아래에서 매니페스트 전체 기준으로 나열
+        }
+        required.push(ModItemVm { name, file, kind: "req", enabled: mf.enabled, mod_id });
+    }
+    if let Some(m) = &manifest {
+        for e in m.mods.iter().filter(|e| !e.required) {
+            let selected = cfg
+                .optional_mods_selection
+                .get(&e.id)
+                .copied()
+                .unwrap_or(e.default_enabled);
+            optional.push(ModItemVm {
+                name: e.id.clone(),
+                file: e.filename.clone(),
+                kind: "opt",
+                enabled: selected,
+                mod_id: Some(e.id.clone()),
+            });
         }
     }
 
@@ -388,6 +412,29 @@ pub fn toggle_mod(paths: &Paths, id: &str, logical_path: &str, enabled: bool) ->
     write_json_atomic(&root.join(LOCKFILE_NAME), &lock)
 }
 
+/// 옵셔널 모드 설치 선택 (§12) — instance.json에 저장. 파일 반영은 동기화가 수행.
+/// mod_id는 IPC 외부 입력 — 캐시된 매니페스트의 optional 모드만 허용.
+pub fn set_optional_selection(
+    paths: &Paths,
+    id: &str,
+    mod_id: &str,
+    install: bool,
+) -> io::Result<()> {
+    let mut cfg = get_instance(paths, id)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, format!("unknown instance {id}")))?;
+    let known = load_cached_manifest(paths, id)
+        .map(|m| m.mods.iter().any(|e| !e.required && e.id == mod_id))
+        .unwrap_or(false);
+    if !known {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unknown optional mod {mod_id}"),
+        ));
+    }
+    cfg.optional_mods_selection.insert(mod_id.to_string(), install);
+    save_instance(paths, &cfg)
+}
+
 /// "매니페스트 상태로 초기화" — 관리(manifest) 모드 전부 활성화. 사용자 파일 무접촉 (PRD 8.2.8).
 pub fn reset_to_manifest(paths: &Paths, id: &str) -> io::Result<()> {
     let lock = load_lockfile(paths, id);
@@ -412,6 +459,54 @@ mod tests {
         fs::write(dir.path().join("mods/inner/b.jar"), vec![0u8; 50]).unwrap();
         assert_eq!(dir_size(dir.path()), 150);
         assert_eq!(dir_size(&dir.path().join("no-such")), 0);
+    }
+
+    /// §12: 미설치 옵셔널 모드도 목록에 나타나고, 토글은 selection에 저장·반영된다.
+    #[test]
+    fn optional_mods_listed_from_manifest_and_selection_persists() {
+        let (_dir, p) = paths();
+        let manifest: Manifest = serde_json::from_value(serde_json::json!({
+            "format_version": 1,
+            "min_launcher_version": "0.1.0",
+            "display_version": "v1",
+            "server_display_name": "테스트 서버",
+            "minecraft_version": "1.20.4",
+            "loader": { "type": "fabric", "version": "0.15.0" },
+            "server": { "address": "play.example.com" },
+            "mods": [
+                { "id": "sodium", "filename": "sodium.jar", "sha256": "a", "size_bytes": 1,
+                  "source": { "type": "url", "url": "https://e.com/s.jar" }, "required": true },
+                { "id": "minimap", "filename": "map.jar", "sha256": "b", "size_bytes": 1,
+                  "source": { "type": "url", "url": "https://e.com/m.jar" }, "required": false,
+                  "default_enabled": true },
+                { "id": "shaders", "filename": "iris.jar", "sha256": "c", "size_bytes": 1,
+                  "source": { "type": "url", "url": "https://e.com/i.jar" }, "required": false,
+                  "default_enabled": false }
+            ]
+        }))
+        .unwrap();
+        let cfg =
+            create_from_manifest(&p, &manifest, "https://e.com/manifest.json", &Default::default())
+                .unwrap();
+
+        // 파일 하나도 설치 전(lockfile 없음)이지만 옵셔널 2종이 default_enabled로 나열
+        let vm = build_vm(&p, &cfg, 0);
+        let opt = &vm.mods.iter().find(|g| g.key == "optional").unwrap().items;
+        assert_eq!(opt.len(), 2);
+        assert!(opt.iter().any(|m| m.mod_id.as_deref() == Some("minimap") && m.enabled));
+        assert!(opt.iter().any(|m| m.mod_id.as_deref() == Some("shaders") && !m.enabled));
+
+        // 선택 변경 → instance.json 반영 + VM에 표시
+        set_optional_selection(&p, &cfg.id, "shaders", true).unwrap();
+        let cfg2 = get_instance(&p, &cfg.id).unwrap();
+        assert_eq!(cfg2.optional_mods_selection.get("shaders"), Some(&true));
+        let vm2 = build_vm(&p, &cfg2, 0);
+        let opt2 = &vm2.mods.iter().find(|g| g.key == "optional").unwrap().items;
+        assert!(opt2.iter().any(|m| m.mod_id.as_deref() == Some("shaders") && m.enabled));
+
+        // required 모드나 미지의 id는 거부 (외부 입력 검증)
+        assert!(set_optional_selection(&p, &cfg.id, "sodium", false).is_err());
+        assert!(set_optional_selection(&p, &cfg.id, "nope", true).is_err());
     }
 
     #[test]
@@ -447,7 +542,7 @@ mod tests {
         let (_d, p) = paths();
         let raw = include_str!("../../../fixtures/data/manifest.json");
         let m: Manifest = serde_json::from_str(raw).unwrap();
-        let cfg = create_from_manifest(&p, &m, "http://127.0.0.1:8750/manifest.json").unwrap();
+        let cfg = create_from_manifest(&p, &m, "http://127.0.0.1:8750/manifest.json", &Default::default()).unwrap();
         assert_eq!(cfg.name, m.server_display_name);
         assert_eq!(cfg.optional_mods_selection.get("dummy-optional"), Some(&true));
         assert!(load_cached_manifest(&p, &cfg.id).is_some());
@@ -459,7 +554,7 @@ mod tests {
         let (_d, p) = paths();
         let raw = include_str!("../../../fixtures/data/manifest.json");
         let m: Manifest = serde_json::from_str(raw).unwrap();
-        let cfg = create_from_manifest(&p, &m, "http://127.0.0.1:8750/manifest.json").unwrap();
+        let cfg = create_from_manifest(&p, &m, "http://127.0.0.1:8750/manifest.json", &Default::default()).unwrap();
         let lock = Lockfile {
             applied_manifest_hash: Some("h".into()),
             applied_at: None,
