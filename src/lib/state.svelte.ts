@@ -46,7 +46,7 @@ export function visibleInstances(): InstanceView[] {
   );
 }
 
-/// required 모드 비활성 여부로 dirty 상태 재계산 (PRD 8.2.8)
+// required 모드 비활성 여부로 dirty 상태 재계산 (PRD 8.2.8)
 export function recomputeDirty(inst: InstanceView) {
   if (inst.manual) return;
   const reqOff = inst.mods.some((g) => g.items.some((m) => m.kind === "req" && !m.enabled));

@@ -1,5 +1,6 @@
 // 진행 오버레이 구동 — PRD 8.10.
-// TODO(M4): Tauri 이벤트(100ms 스로틀) 구독으로 교체. 현재는 UI 검증용 목 진행.
+// 브라우저 dev 전용 목 진행. Tauri에서는 백엔드 progress 이벤트(App.svelte 구독)가
+// ui.progress를 직접 채우므로 이 타이머는 돌지 않는다.
 import { t } from "./i18n";
 import { ui } from "./state.svelte";
 
@@ -25,7 +26,7 @@ export function startProgress(title: string, stages: string[], onDone?: () => vo
   }, 160);
 }
 
-/// 취소: 스테이징 폐기 = 기존 상태 유지 (PRD 8.2.2)
+// 취소: 스테이징 폐기 = 기존 상태 유지 (PRD 8.2.2)
 export function stopProgress() {
   if (timer) clearInterval(timer);
   timer = null;

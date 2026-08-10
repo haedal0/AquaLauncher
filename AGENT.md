@@ -79,9 +79,10 @@ pnpm tauri dev                             # 앱 실행 (pnpm install 선행)
 
 - MS/Mojang 서드파티 런처 승인 (§0-1): 승인 전까지 `auth::MockAuthProvider`로 개발
 - CurseForge API 키 (§0-4): 승인 전까지 `browse::MockCurseForge` + Modrinth 우선 구현
-- 코드서명 (§0-2): 로컬 빌드 미서명 허용, CI 릴리스 잡만 서명 요구
+- 코드서명 (§0-2): 예산 제약으로 미서명 배포 허용(우회 안내 동봉). 업데이터 minisign 서명만 필수. SignPath(OSS 무료) 확보 시 Windows 서명 도입
 
 ## 작업 순서 (마일스톤 — PRD §13)
 
-현재 단계: **M0**. 다음 작업이 명시되지 않았다면 M0 미완료 건을 우선한다.
-M0 스파이크(Forge/NeoForge headless 설치 검증)의 산출물은 코드가 아니라 `docs/spike-forge-report.md` 보고서다.
+현재 단계: **M4** (M0~M3 완료 — M0 스파이크 산출물은 `docs/spike-forge-report.md`, M3 PKCE 인증은 `feat/auth-pkce` 브랜치에서 사람 리뷰 대기).
+M4 본체(딥링크, 테마, 옵셔널 모드 UI, §9 에러 코드, §8.12 진단, §10.1 랜딩)는 끝났고 게이트(파일럿 서버 클로즈드 베타)가 남았다.
+다음 작업이 명시되지 않았다면 M2 잔여 건(modrinth 소스 해석, CLI `init`/`diff`/`add-modrinth`, `validate --check-urls`)을 우선한다.
